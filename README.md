@@ -10,6 +10,6 @@ Warning : the creator of this software is in no way responsible for your actions
 If u not have metasploit plz download at : https://www.metasploit.com/
 
 Launch file with this commands:
-
-chmod +X Yaksee.py
+ 
+chmod +X Yaksee.py     
 sudo python3.6 Yaksee.py
