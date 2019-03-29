@@ -5,7 +5,7 @@ from time import *
 from os import *
 from random import *
 system('clear')
-random = randint(1, 999)
+random = randint(1, 9999)
 i = True
 ip = 'No selected'
 port = 4444
@@ -99,6 +99,7 @@ while i == True:
 
 #HELP
 	if select == 'help':
+		system('clear')
 		img()
 		try:
 			press = input('PRESS ENTER TO LAUNCH')
@@ -131,10 +132,15 @@ while i == True:
 	if select == 'number':
 		try:
 			number =input('choose the number of payloads u want : ')
+			number = int(number)
 		except KeyboardInterrupt:
 			print('BYE')
 			quit('THX FOR USING YAKSEE !')
 			break
+		except:
+			print('U have not slect a valide number !')
+			number = 'No selected'
+			continue
 		continue
 #NUMBER!
 
@@ -270,6 +276,7 @@ while i == True:
 
 #QUIT
 	if select == 'exit':
+		system('clear')
 		quit('THX FOR USING YAKSEE !')
 #QUIT!
 
