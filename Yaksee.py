@@ -93,7 +93,6 @@ while i == True:
 			quit('THX FOR USING YAKSEE !')
 			break
 			system('clear')
-		system('clear')
 		continue	
 #SHOW!
 
