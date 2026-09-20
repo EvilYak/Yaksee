@@ -237,6 +237,47 @@ export function makePoolCeilingMaterial() {
   return new THREE.MeshStandardMaterial({ map, roughness: 0.9 });
 }
 
+// Eau peu profonde qui recouvre le sol des pool rooms : teinte translucide +
+// ridules animées (deux calques de bruit qui dérivent à des vitesses
+// différentes), assez brillante pour accrocher les reflets des néons.
+export function makeWaterMaterial() {
+  const size = 512;
+  const canvas = makeCanvas(size);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#6f9aa0';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 40; i++) {
+    stain(ctx, size, Math.random() * size, Math.random() * size, 40 + Math.random() * 90, '210,235,235', 0.08);
+  }
+  addNoise(ctx, size, 10);
+  const map = toTexture(canvas, 6, 6);
+
+  const bump = makeCanvas(256);
+  const bctx = bump.getContext('2d');
+  bctx.fillStyle = '#808080';
+  bctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 60; i++) {
+    stain(bctx, 256, Math.random() * 256, Math.random() * 256, 20 + Math.random() * 40, '255,255,255', 0.2);
+  }
+  const bumpMap = toBumpTexture(bump, 9, 9);
+
+  const mat = new THREE.MeshStandardMaterial({
+    map,
+    bumpMap,
+    bumpScale: 0.25,
+    color: 0xbfe4e8,
+    transparent: true,
+    opacity: 0.62,
+    roughness: 0.12,
+    metalness: 0.05,
+    depthWrite: false,
+  });
+  // Deux calques de bruit qui dérivent à vitesses différentes pour casser la
+  // répétition — on garde une référence pour les animer depuis world.js.
+  mat.userData.animatedMaps = [map, bumpMap];
+  return mat;
+}
+
 // ---------------------------------------------------------------------------
 // Hôtel : façade à fenêtres (certaines allumées), sol de cour pavée.
 // ---------------------------------------------------------------------------

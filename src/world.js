@@ -19,6 +19,7 @@ import {
   makeKittyCarpetMaterial,
   makeKittyCeilingMaterial,
   makeMirrorDecalMaterial,
+  makeWaterMaterial,
 } from './materials.js';
 import { ZONES, DEFAULT_THEME, DEFAULT_WALL_HEIGHT, wallHeightFor } from './zones.js';
 
@@ -351,6 +352,14 @@ export function buildWorld(maze) {
     group.add(patch);
   }
 
+  // ---------- Eau peu profonde qui recouvre tout le sol des pool rooms ----------
+  const poolExt = rectWorldExtent(ZONES.pool.rect, C);
+  const waterMat = makeWaterMaterial();
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(poolExt.w, poolExt.h), waterMat);
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(poolExt.cx, 0.045, poolExt.cz);
+  group.add(water);
+
   // ---------- Plafond : plaque trouée (poches) + capuchon dédié par poche ----------
   const ceilingBase = buildFloorWithHoles(size, C, zoneRects, themes.backrooms.ceiling);
   ceilingBase.position.y = WALL_HEIGHT;
@@ -600,6 +609,10 @@ export function buildWorld(maze) {
     if (followLight.visible) {
       followLight.intensity = 23 + Math.sin(t * 11) * 1.4 + Math.sin(t * 3.1) * 1;
     }
+
+    // Ridules d'eau : deux calques qui dérivent à des vitesses différentes.
+    waterMat.map.offset.set(t * 0.012, t * 0.008);
+    waterMat.bumpMap.offset.set(-t * 0.02, t * 0.015);
 
     flickerIdx.forEach((i) => {
       const n = Math.sin(t * 14 + i) * Math.sin(t * 3.3 + i * 7.1);

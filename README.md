@@ -8,7 +8,9 @@ repose entièrement sur l'ambiance et l'exploration.
 Le labyrinthe classique ("backrooms" jaunes) relie quatre poches thématiques
 cachées dans les coins de la carte :
 
-- **Pool rooms** — carrelage blanc/crème humide, joints de mortier, lumière froide.
+- **Pool rooms** — carrelage blanc/crème humide, joints de mortier, lumière
+  froide, et une eau peu profonde (translucide, ridules animées) qui recouvre
+  tout le sol — les pas y font des éclaboussures au lieu du bruit de moquette.
 - **Hôtel** — grande cour intérieure entourée d'une façade à fenêtres (certaines
   allumées), sol pavé, ambiance nocturne bleutée.
 - **Quartier pavillonnaire** — petites maisons vertes lisses, réverbères, pelouse
@@ -91,10 +93,14 @@ version du site.
 
 ## Contrôles
 
-- **Mobile** : joystick tactile en bas à gauche pour se déplacer, glisser le
-  doigt sur la moitié droite de l'écran pour regarder autour de soi.
-- **Desktop** (pour tester) : `WASD`/flèches pour se déplacer, cliquer-glisser
-  la souris pour regarder.
+- **Mobile** : joystick tactile en bas à gauche pour se déplacer (le pousser à
+  fond fait courir au lieu de marcher), glisser le doigt sur la moitié droite
+  de l'écran pour regarder autour de soi.
+- **Desktop** (pour tester) : `WASD`/flèches pour se déplacer, `Maj` (Shift)
+  pour courir, cliquer-glisser la souris pour regarder.
+- **Manette** (Gamepad API, brancher/appairer puis appuyer sur un bouton pour
+  l'activer) : stick gauche pour se déplacer, stick droit pour regarder,
+  bouton A/Cross pour courir.
 - **Boutons en haut à droite** : `VHS` bascule le post-processing found-footage
   (grain/vignette/aberration chromatique/VHS), l'icône ampoule bascule la lampe
   portée par le joueur (l'ambiance des néons/façades reste, seule cette source

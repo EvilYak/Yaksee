@@ -43,7 +43,7 @@ const controls = createControls({
   cellSize: world.cellSize,
   startPos: world.startWorldPos,
   initialYaw: maze.startYaw(),
-  onStep: () => audio.footstep(),
+  onStep: (theme, sprinting) => audio.footstep(theme, sprinting),
 });
 
 const postfx = createPostFX(renderer, scene, camera);

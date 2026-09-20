@@ -2,7 +2,19 @@ import * as THREE from 'three';
 
 const EYE_HEIGHT = 1.65;
 const PLAYER_RADIUS = 0.3;
-const MOVE_SPEED = 2.1; // m/s, rythme de marche réaliste
+const WALK_SPEED = 2.1; // m/s, rythme de marche réaliste
+const RUN_SPEED = 4.0; // m/s, sprint
+
+// Manette : mapping "standard" (Gamepad API) — stick gauche = déplacement,
+// stick droit = regard, bouton A/Cross (index 0) = sprint.
+const GAMEPAD_DEADZONE = 0.16;
+const GAMEPAD_LOOK_SPEED = 2.6;
+const GAMEPAD_SPRINT_BUTTON = 0;
+
+function applyDeadzone(v, dz = GAMEPAD_DEADZONE) {
+  if (Math.abs(v) < dz) return 0;
+  return (v - Math.sign(v) * dz) / (1 - dz);
+}
 
 export function createControls({ camera, maze, cellSize, startPos, initialYaw, onStep }) {
   const joystickZone = document.getElementById('joystick-zone');
@@ -18,16 +30,19 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   let bobLast = 0;
 
   const moveVec = { x: 0, y: 0 }; // x = strafe, y = avant/arrière, -1..1
+  let joyMagnitude = 0; // 0..1, à quel point le joystick est poussé
   const keys = new Set();
 
   // ---------- Joystick tactile ----------
   let joyPointerId = null;
   const joyRadius = 46;
+  const JOY_RUN_THRESHOLD = 0.92; // pousser à fond le joystick = courir
 
   function joyReset() {
     joystickNub.style.transform = 'translate(0,0)';
     moveVec.x = 0;
     moveVec.y = 0;
+    joyMagnitude = 0;
   }
 
   joystickZone.addEventListener('pointerdown', (e) => {
@@ -61,6 +76,7 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     joystickNub.style.transform = `translate(${dx}px, ${dy}px)`;
     moveVec.x = dx / joyRadius;
     moveVec.y = -dy / joyRadius;
+    joyMagnitude = dist / joyRadius;
   }
 
   // ---------- Regard tactile (drag) ----------
@@ -96,7 +112,7 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   // ---------- Souris + clavier (bureau) ----------
   const MOUSE_SENS = 0.0026;
   let mouseDown = false;
-  app.addEventListener('mousedown', (e) => {
+  app.addEventListener('mousedown', () => {
     if (window.innerWidth < 900) return;
     mouseDown = true;
   });
@@ -118,6 +134,26 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
     return { x, y };
+  }
+
+  // ---------- Manette (Gamepad API, pollée à chaque frame) ----------
+  function pollGamepad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let pad = null;
+    for (const p of pads) {
+      if (p) {
+        pad = p;
+        break;
+      }
+    }
+    if (!pad) return { x: 0, y: 0, lookX: 0, lookY: 0, sprint: false };
+
+    const x = applyDeadzone(pad.axes[0] || 0);
+    const y = -applyDeadzone(pad.axes[1] || 0);
+    const lookX = applyDeadzone(pad.axes[2] || 0);
+    const lookY = applyDeadzone(pad.axes[3] || 0);
+    const sprint = !!(pad.buttons[GAMEPAD_SPRINT_BUTTON] && pad.buttons[GAMEPAD_SPRINT_BUTTON].pressed);
+    return { x, y, lookX, lookY, sprint };
   }
 
   // ---------- Collision grille ----------
@@ -149,9 +185,20 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
 
   function update(dt) {
     const kb = keyboardVector();
-    const inX = THREE.MathUtils.clamp(moveVec.x + kb.x, -1, 1);
-    const inY = THREE.MathUtils.clamp(moveVec.y + kb.y, -1, 1);
+    const gp = pollGamepad();
+
+    if (gp.lookX || gp.lookY) {
+      yaw -= gp.lookX * GAMEPAD_LOOK_SPEED * dt;
+      pitch -= gp.lookY * GAMEPAD_LOOK_SPEED * dt;
+      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    }
+
+    const inX = THREE.MathUtils.clamp(moveVec.x + kb.x + gp.x, -1, 1);
+    const inY = THREE.MathUtils.clamp(moveVec.y + kb.y + gp.y, -1, 1);
     const speedScale = Math.min(1, Math.hypot(inX, inY));
+
+    const sprinting = keys.has('ShiftLeft') || keys.has('ShiftRight') || joyMagnitude > JOY_RUN_THRESHOLD || gp.sprint;
+    const moveSpeed = sprinting ? RUN_SPEED : WALK_SPEED;
 
     const sinY = Math.sin(yaw);
     const cosY = Math.cos(yaw);
@@ -161,8 +208,8 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     const rightX = cosY;
     const rightZ = -sinY;
 
-    const dx = (forwardX * inY + rightX * inX) * MOVE_SPEED * dt;
-    const dz = (forwardZ * inY + rightZ * inX) * MOVE_SPEED * dt;
+    const dx = (forwardX * inY + rightX * inX) * moveSpeed * dt;
+    const dz = (forwardZ * inY + rightZ * inX) * moveSpeed * dt;
 
     position.x = resolveAxis(position.x, dx, 'x', position.z);
     position.z = resolveAxis(position.z, dz, 'z', position.x);
@@ -170,11 +217,17 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     let bobY = 0;
     let bobX = 0;
     if (speedScale > 0.05) {
-      bobPhase += dt * 9 * speedScale;
-      bobY = Math.abs(Math.sin(bobPhase)) * 0.045;
+      const bobRate = sprinting ? 13 : 9;
+      const bobAmp = sprinting ? 0.065 : 0.045;
+      bobPhase += dt * bobRate * speedScale;
+      bobY = Math.abs(Math.sin(bobPhase)) * bobAmp;
       bobX = Math.sin(bobPhase * 0.5) * 0.02;
       const s = Math.sin(bobPhase);
-      if (bobLast <= 0 && s > 0) onStep && onStep();
+      if (bobLast <= 0 && s > 0 && onStep) {
+        const cx = Math.round(position.x / cellSize);
+        const cy = Math.round(position.z / cellSize);
+        onStep(maze.themeAt(cx, cy), sprinting);
+      }
       bobLast = s;
     } else {
       bobPhase = 0;
@@ -186,7 +239,7 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
 
-    return { moving: speedScale > 0.05, position };
+    return { moving: speedScale > 0.05, sprinting, position };
   }
 
   return { update, position };

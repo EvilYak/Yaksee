@@ -81,8 +81,12 @@ export function createAudio() {
     lfo.start();
   }
 
-  function footstep() {
+  function footstep(theme, sprinting) {
     if (!started || !ctx) return;
+    if (theme === 'pool') {
+      splash(sprinting);
+      return;
+    }
     const t = ctx.currentTime;
     const src = ctx.createBufferSource();
     src.buffer = noiseBuffer(0.18, ctx);
@@ -90,14 +94,51 @@ export function createAudio() {
     filter.type = 'lowpass';
     filter.frequency.value = 320 + Math.random() * 140;
     const gain = ctx.createGain();
+    const peak = (sprinting ? 0.34 : 0.25) + Math.random() * 0.08;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(0.25 + Math.random() * 0.08, t + 0.012);
+    gain.gain.linearRampToValueAtTime(peak, t + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
     src.connect(filter);
     filter.connect(gain);
     gain.connect(master);
     src.start(t);
     src.stop(t + 0.2);
+  }
+
+  // Pas dans l'eau des pool rooms : un "plouf" grave + des éclaboussures aiguës.
+  function splash(sprinting) {
+    const t = ctx.currentTime;
+    const thud = ctx.createBufferSource();
+    thud.buffer = noiseBuffer(0.12, ctx);
+    const thudFilter = ctx.createBiquadFilter();
+    thudFilter.type = 'lowpass';
+    thudFilter.frequency.value = 220;
+    const thudGain = ctx.createGain();
+    const thudPeak = (sprinting ? 0.3 : 0.22) + Math.random() * 0.05;
+    thudGain.gain.setValueAtTime(0.0001, t);
+    thudGain.gain.linearRampToValueAtTime(thudPeak, t + 0.01);
+    thudGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    thud.connect(thudFilter);
+    thudFilter.connect(thudGain);
+    thudGain.connect(master);
+    thud.start(t);
+    thud.stop(t + 0.16);
+
+    const spray = ctx.createBufferSource();
+    spray.buffer = noiseBuffer(0.2, ctx);
+    const sprayFilter = ctx.createBiquadFilter();
+    sprayFilter.type = 'highpass';
+    sprayFilter.frequency.value = 2200 + Math.random() * 800;
+    const sprayGain = ctx.createGain();
+    const sprayPeak = (sprinting ? 0.17 : 0.12) + Math.random() * 0.05;
+    sprayGain.gain.setValueAtTime(0.0001, t);
+    sprayGain.gain.linearRampToValueAtTime(sprayPeak, t + 0.008);
+    sprayGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    spray.connect(sprayFilter);
+    sprayFilter.connect(sprayGain);
+    sprayGain.connect(master);
+    spray.start(t);
+    spray.stop(t + 0.24);
   }
 
   // Craquement/grésillement bref, déclenché aléatoirement pour l'ambiance found-footage.
