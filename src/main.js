@@ -7,6 +7,12 @@ import { createAudio } from './audio.js';
 import { createPostFX } from './postfx.js';
 import { createHud } from './hud.js';
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
 const canvas = document.getElementById('scene');
 const bootScreen = document.getElementById('boot-screen');
 const startBtn = document.getElementById('start-btn');

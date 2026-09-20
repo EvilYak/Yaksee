@@ -222,13 +222,13 @@ function tileCanvas({ base, grout, stainColor, tilesPerSide = 8, stainCount = 5 
 export function makePoolTileMaterial() {
   const canvas = tileCanvas({ base: '#d9d3bf', grout: 'rgba(140,135,110,0.55)', stainColor: '110,120,90' });
   const map = toTexture(canvas, 3.5, 1.6);
-  return new THREE.MeshStandardMaterial({ map, roughness: 0.55, metalness: 0.05 });
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.7, metalness: 0.05 });
 }
 
 export function makePoolFloorMaterial() {
   const canvas = tileCanvas({ base: '#c3bda3', grout: 'rgba(90,95,75,0.6)', stainColor: '70,90,70', tilesPerSide: 10, stainCount: 9 });
   const map = toTexture(canvas, 12, 12);
-  return new THREE.MeshStandardMaterial({ map, roughness: 0.35, metalness: 0.08 });
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.55, metalness: 0.08 });
 }
 
 export function makePoolCeilingMaterial() {

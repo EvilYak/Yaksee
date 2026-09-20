@@ -152,6 +152,12 @@ function buildRoof(width, wallHeight, depth, roofRise, mat) {
   gableBack.rotation.y = Math.PI;
   group.add(gableBack);
 
+  // Faîtière : couvre la jonction entre les deux pans (sinon un petit interstice
+  // reste visible à l'épaisseur des plaques, comme un toit sans faîtage réel).
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, depth + overhang + 0.05), mat);
+  ridge.position.set(0, wallHeight + roofRise, 0);
+  group.add(ridge);
+
   return group;
 }
 

@@ -28,9 +28,15 @@ relief** et **joints de sol en relief** (moquette/carrelage/pavés) partout où
 on marche, bordures de trottoir dans le quartier.
 
 Techno : [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/), 100%
-navigateur, jouable au téléphone (et installable en PWA sur l'écran d'accueil).
-Toutes les textures et tous les sons sont générés en code (canvas 2D / Web Audio),
-il n'y a aucun asset externe à télécharger.
+navigateur, jouable au téléphone (et installable en PWA sur l'écran d'accueil,
+avec un vrai service worker : le jeu se relance hors-ligne après une première
+visite). Toutes les textures et tous les sons sont générés en code (canvas 2D
+/ Web Audio), il n'y a aucun asset externe à télécharger.
+
+Le rendu est optimisé pour mobile : toute la géométrie (murs, plinthes,
+plafond, sol) est répartie en petits blocs spatiaux pour que le moteur
+n'affiche que ce qui est réellement dans le champ de vision, et la distance de
+rendu s'ajuste à la densité de brouillard de chaque zone.
 
 ## Lancer en local
 
