@@ -1,0 +1,13 @@
+{
+  "name": "NO CLIP — Backrooms",
+  "short_name": "NO CLIP",
+  "description": "Exploration liminale réaliste, sans monstre, ambiance found-footage.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait-primary",
+  "background_color": "#050503",
+  "theme_color": "#0a0a08",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
