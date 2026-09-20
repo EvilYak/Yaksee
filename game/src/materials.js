@@ -9,17 +9,83 @@ function makeCanvas(size = 512) {
   return c;
 }
 
-function addNoise(ctx, size, amount, alpha = 0.06) {
+// ---------------------------------------------------------------------------
+// Bruit cohérent (value noise + fBm) : un vrai matériau a des variations
+// corrélées sur plusieurs échelles (fibres, humidité, usure), jamais du bruit
+// blanc pixel par pixel — c'est ce qui faisait ressembler les premières
+// textures à de la neige TV plutôt qu'à du papier peint ou de la moquette.
+function smootherstep(t) {
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function valueNoiseLayer(size, cells, rand) {
+  const g = new Float32Array((cells + 1) * (cells + 1));
+  for (let i = 0; i < g.length; i++) g[i] = rand();
+  const out = new Float32Array(size * size);
+  for (let py = 0; py < size; py++) {
+    const fy = (py / size) * cells;
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(cells, y0 + 1);
+    const ty = smootherstep(fy - y0);
+    for (let px = 0; px < size; px++) {
+      const fx = (px / size) * cells;
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(cells, x0 + 1);
+      const tx = smootherstep(fx - x0);
+      const a = g[y0 * (cells + 1) + x0] * (1 - tx) + g[y0 * (cells + 1) + x1] * tx;
+      const b = g[y1 * (cells + 1) + x0] * (1 - tx) + g[y1 * (cells + 1) + x1] * tx;
+      out[py * size + px] = a * (1 - ty) + b * ty;
+    }
+  }
+  return out;
+}
+
+// Fractal Brownian motion : superpose plusieurs octaves du bruit ci-dessus
+// (grossier -> fin) pour une variation naturelle, valeurs normalisées 0..1.
+function fbm(size, octaves, baseCells, rand) {
+  const out = new Float32Array(size * size);
+  let amp = 1;
+  let totalAmp = 0;
+  let cells = baseCells;
+  for (let o = 0; o < octaves; o++) {
+    const layer = valueNoiseLayer(size, cells, rand);
+    for (let i = 0; i < out.length; i++) out[i] += layer[i] * amp;
+    totalAmp += amp;
+    amp *= 0.55;
+    cells *= 2;
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= totalAmp;
+  return out;
+}
+
+function addNoise(ctx, size, amount, rand = Math.random) {
+  const noise = fbm(size, 4, 4, rand);
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const n = (Math.random() - 0.5) * amount;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const n = (noise[p] - 0.5) * amount;
     d[i] += n;
     d[i + 1] += n;
     d[i + 2] += n;
   }
   ctx.putImageData(img, 0, 0);
-  ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+}
+
+// Variation de teinte à grande échelle (plaques d'humidité, usure inégale) :
+// applique une couleur en la modulant par une nappe de bruit basse fréquence,
+// pour qu'aucune zone du mur/sol n'ait exactement la même couleur.
+function grungeTint(ctx, size, { color, strength = 0.3, cells = 3, octaves = 3, rand = Math.random }) {
+  const noise = fbm(size, octaves, cells, rand);
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  const [cr, cg, cb] = color;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const t = Math.max(0, noise[p] - 0.5) * 2 * strength;
+    d[i] = d[i] * (1 - t) + cr * t;
+    d[i + 1] = d[i + 1] * (1 - t) + cg * t;
+    d[i + 2] = d[i + 2] * (1 - t) + cb * t;
+  }
+  ctx.putImageData(img, 0, 0);
 }
 
 function stain(ctx, size, x, y, r, color, alpha) {
@@ -57,27 +123,32 @@ export function makeWallpaperMaterial() {
   ctx.fillStyle = '#b7a24a';
   ctx.fillRect(0, 0, size, size);
 
-  // Légère variation verticale (bandes de papier peint).
+  // Décoloration inégale à grande échelle (jamais deux zones du mur de la
+  // même teinte exacte, comme un vrai papier peint vieilli).
+  grungeTint(ctx, size, { color: [92, 78, 32], strength: 0.35, cells: 3, octaves: 3 });
+  grungeTint(ctx, size, { color: [140, 128, 90], strength: 0.18, cells: 5, octaves: 2 });
+
+  // Légère variation verticale (bandes de papier peint / lés).
   for (let x = 0; x < size; x += 64) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.04})`;
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
     ctx.fillRect(x, 0, 64, size);
   }
 
-  // Taches d'humidité.
+  // Taches d'humidité, du diffus au franc.
   for (let i = 0; i < 10; i++) {
     stain(ctx, size, Math.random() * size, Math.random() * size, 30 + Math.random() * 90, '70,60,20', 0.18);
   }
-  for (let i = 0; i < 4; i++) {
-    stain(ctx, size, Math.random() * size, size * (0.6 + Math.random() * 0.4), 20 + Math.random() * 50, '30,25,10', 0.22);
+  for (let i = 0; i < 5; i++) {
+    stain(ctx, size, Math.random() * size, size * (0.6 + Math.random() * 0.4), 20 + Math.random() * 50, '30,25,10', 0.24);
   }
 
-  addNoise(ctx, size, 14);
+  addNoise(ctx, size, 16);
 
   const bump = makeCanvas(256);
   const bctx = bump.getContext('2d');
   bctx.fillStyle = '#808080';
   bctx.fillRect(0, 0, 256, 256);
-  addNoise(bctx, 256, 30);
+  addNoise(bctx, 256, 55);
 
   const map = toTexture(canvas, 4, 2.2);
   const bumpMap = toBumpTexture(bump, 4, 2.2);
@@ -99,7 +170,11 @@ export function makeCarpetMaterial() {
   ctx.fillStyle = '#7d6a2e';
   ctx.fillRect(0, 0, size, size);
 
-  // Motif "moquette de bureau" : petit damier bruité.
+  // Usure inégale (zones de passage plus sombres/tassées) avant le grain fin.
+  grungeTint(ctx, size, { color: [45, 38, 16], strength: 0.4, cells: 4, octaves: 3 });
+  grungeTint(ctx, size, { color: [110, 96, 50], strength: 0.15, cells: 8, octaves: 2 });
+
+  // Motif "moquette de bureau" : petit damier bruité (structure des dalles).
   const cell = 8;
   for (let y = 0; y < size; y += cell) {
     for (let x = 0; x < size; x += cell) {
@@ -113,13 +188,13 @@ export function makeCarpetMaterial() {
     stain(ctx, size, Math.random() * size, Math.random() * size, 40 + Math.random() * 100, '20,20,10', 0.25);
   }
 
-  addNoise(ctx, size, 20);
+  addNoise(ctx, size, 24);
 
   const bump = makeCanvas(256);
   const bctx = bump.getContext('2d');
   bctx.fillStyle = '#808080';
   bctx.fillRect(0, 0, 256, 256);
-  addNoise(bctx, 256, 60);
+  addNoise(bctx, 256, 90);
 
   const map = toTexture(canvas, 18, 18);
   const bumpMap = toBumpTexture(bump, 18, 18);
@@ -140,6 +215,9 @@ export function makeCeilingMaterial() {
 
   ctx.fillStyle = '#d8d2b8';
   ctx.fillRect(0, 0, size, size);
+
+  // Jaunissement/humidité diffus avant la grille (nicotine, infiltrations).
+  grungeTint(ctx, size, { color: [150, 130, 70], strength: 0.28, cells: 3, octaves: 3 });
 
   const tile = size / 4;
   ctx.strokeStyle = 'rgba(90,85,60,0.5)';
@@ -162,7 +240,7 @@ export function makeCeilingMaterial() {
     stain(ctx, size, tx + tile / 2, ty + tile / 2, tile * 0.6, '60,55,30', 0.3);
   }
 
-  addNoise(ctx, size, 10);
+  addNoise(ctx, size, 14);
 
   const map = toTexture(canvas, 3, 3);
 
@@ -190,6 +268,8 @@ function tileCanvas({ base, grout, stainColor, tilesPerSide = 8, stainCount = 5 
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
+
+  grungeTint(ctx, size, { color: [70, 75, 55], strength: 0.16, cells: 4, octaves: 3 });
 
   const cell = size / tilesPerSide;
   for (let y = 0; y < tilesPerSide; y++) {
