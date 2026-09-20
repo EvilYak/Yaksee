@@ -261,6 +261,51 @@ export function buildWorld(maze) {
     return DEFAULT_THEME;
   }
 
+  // Toutes les frontières internes de cellules dont le thème appartient à
+  // `themeSet` — sert à quadriller le plafond (T-bar) et le sol (joints)
+  // avec de vrais segments 3D plutôt qu'une texture peinte.
+  function collectCellEdges(themeSet) {
+    const v = [];
+    const h = [];
+    for (let x = 0; x < size; x++) {
+      for (let y = 0; y < size; y++) {
+        if (!themeSet.has(maze.themeAt(x, y))) continue;
+        if (x < size - 1) v.push([x * C + C / 2, y * C]);
+        if (y < size - 1) h.push([x * C, y * C + C / 2]);
+      }
+    }
+    return { v, h };
+  }
+
+  function buildEdgeGridMesh(edges, { thickness, depth, y, color }) {
+    const gridGroup = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+    const vGeo = new THREE.BoxGeometry(thickness, depth, C);
+    const hGeo = new THREE.BoxGeometry(C, depth, thickness);
+    const dummy2 = new THREE.Object3D();
+    if (edges.v.length) {
+      const vMesh = new THREE.InstancedMesh(vGeo, mat, edges.v.length);
+      edges.v.forEach(([px, pz], i) => {
+        dummy2.position.set(px, y, pz);
+        dummy2.updateMatrix();
+        vMesh.setMatrixAt(i, dummy2.matrix);
+      });
+      vMesh.instanceMatrix.needsUpdate = true;
+      gridGroup.add(vMesh);
+    }
+    if (edges.h.length) {
+      const hMesh = new THREE.InstancedMesh(hGeo, mat, edges.h.length);
+      edges.h.forEach(([px, pz], i) => {
+        dummy2.position.set(px, y, pz);
+        dummy2.updateMatrix();
+        hMesh.setMatrixAt(i, dummy2.matrix);
+      });
+      hMesh.instanceMatrix.needsUpdate = true;
+      gridGroup.add(hMesh);
+    }
+    return gridGroup;
+  }
+
   // ---------- Sol : base "backrooms" pleine étendue + poches thématiques ----------
   const extent = size * C;
   const floorGeo = new THREE.PlaneGeometry(extent, extent);
@@ -290,6 +335,17 @@ export function buildWorld(maze) {
     cap.position.set(e.cx, themes[name].wallHeight, e.cz);
     group.add(cap);
   }
+
+  // ---------- Plafond suspendu : vraie grille en relief (T-bar), pas une texture ----------
+  const flatCeilingEdges = collectCellEdges(new Set(['backrooms', 'pool', 'kitty']));
+  group.add(
+    buildEdgeGridMesh(flatCeilingEdges, { thickness: 0.05, depth: 0.05, y: WALL_HEIGHT - 0.025, color: 0x736c58 }),
+  );
+
+  // ---------- Sol : joints en relief (moquette/carrelage) sous les mêmes zones ----------
+  group.add(
+    buildEdgeGridMesh(flatCeilingEdges, { thickness: 0.035, depth: 0.018, y: 0.009, color: 0x241f10 }),
+  );
 
   // ---------- Murs : regroupés par thème + hauteur (InstancedMesh) ----------
   const wallBuckets = {}; // theme -> { v: [[x,z]], h: [[x,z]] }
@@ -459,6 +515,16 @@ export function buildWorld(maze) {
     group.add(light);
   });
 
+  // Bordures de trottoir en relief de part et d'autre de l'allée (pas juste peintes au sol).
+  const curbMat = new THREE.MeshStandardMaterial({ color: 0x9a9488, roughness: 0.8 });
+  const curbGeo = new THREE.BoxGeometry(0.1, 0.09, nbhd.h);
+  const pathHalfWidth = nbhd.w * 0.08;
+  [-1, 1].forEach((side) => {
+    const curb = new THREE.Mesh(curbGeo, curbMat);
+    curb.position.set(nbhd.cx + side * pathHalfWidth, 0.045, nbhd.cz);
+    group.add(curb);
+  });
+
   // ---------- Hôtel : jardinières décoratives ----------
   const htl = rectWorldExtent(ZONES.hotel.rect, C);
   const planterMat = makeHouseMaterial(120);
@@ -485,6 +551,16 @@ export function buildWorld(maze) {
     east.position.x = htl.maxX;
     group.add(east);
   });
+
+  // Joints de pavés en relief au sol de la cour (même technique que les couloirs).
+  group.add(
+    buildEdgeGridMesh(collectCellEdges(new Set(['hotel'])), {
+      thickness: 0.035,
+      depth: 0.02,
+      y: 0.011,
+      color: 0x131316,
+    }),
+  );
 
   // ---------- Kitty : miroirs ovals (cadre en relief) accrochés aux murs ----------
   const mirrorGlassMat = makeMirrorDecalMaterial();

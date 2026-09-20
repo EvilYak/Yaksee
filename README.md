@@ -22,8 +22,10 @@ joueur en s'en approchant, pour une transition douce entre les ambiances.
 
 Le décor est en vraie géométrie 3D, pas juste des textures plaquées : toits à
 deux pans avec pignons, fenêtres à cadre/vitre/appui en relief, portes avec
-poignée, miroirs à cadre, plinthes au pied de tous les murs de couloir et
-caissons encastrés autour des néons.
+poignée, miroirs à cadre, plinthes au pied de tous les murs de couloir,
+caissons encastrés autour des néons, **grille de plafond suspendu (T-bar) en
+relief** et **joints de sol en relief** (moquette/carrelage/pavés) partout où
+on marche, bordures de trottoir dans le quartier.
 
 Techno : [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/), 100%
 navigateur, jouable au téléphone (et installable en PWA sur l'écran d'accueil).
