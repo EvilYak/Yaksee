@@ -261,6 +261,46 @@ export function buildWorld(maze) {
     return DEFAULT_THEME;
   }
 
+  const dummy = new THREE.Object3D();
+
+  // Le labyrinthe entier tient dans quelques gros InstancedMesh si on ne les
+  // découpe pas — le moteur devrait alors redessiner toute la carte à chaque
+  // image, même hors champ de vision. On répartit plutôt chaque catégorie de
+  // géométrie (murs, plinthes, joints...) en petits paquets spatiaux : chacun
+  // obtient son propre volume englobant, donc son propre frustum culling.
+  const CHUNK_CELLS = 8;
+  const chunkWorldSize = CHUNK_CELLS * C;
+  function chunkKeyOf(px, pz) {
+    return `${Math.floor(px / chunkWorldSize)},${Math.floor(pz / chunkWorldSize)}`;
+  }
+  function groupByChunk(list) {
+    const map = new Map();
+    for (const entry of list) {
+      const key = chunkKeyOf(entry[0], entry[1]);
+      let arr = map.get(key);
+      if (!arr) {
+        arr = [];
+        map.set(key, arr);
+      }
+      arr.push(entry);
+    }
+    return map;
+  }
+  function addChunkedInstances(targetGroup, list, geometry, material, placeFn) {
+    if (!list.length) return;
+    groupByChunk(list).forEach((entries) => {
+      const mesh = new THREE.InstancedMesh(geometry, material, entries.length);
+      entries.forEach((entry, i) => {
+        placeFn(dummy, entry);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      targetGroup.add(mesh);
+    });
+  }
+
   // Toutes les frontières internes de cellules dont le thème appartient à
   // `themeSet` — sert à quadriller le plafond (T-bar) et le sol (joints)
   // avec de vrais segments 3D plutôt qu'une texture peinte.
@@ -282,27 +322,9 @@ export function buildWorld(maze) {
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
     const vGeo = new THREE.BoxGeometry(thickness, depth, C);
     const hGeo = new THREE.BoxGeometry(C, depth, thickness);
-    const dummy2 = new THREE.Object3D();
-    if (edges.v.length) {
-      const vMesh = new THREE.InstancedMesh(vGeo, mat, edges.v.length);
-      edges.v.forEach(([px, pz], i) => {
-        dummy2.position.set(px, y, pz);
-        dummy2.updateMatrix();
-        vMesh.setMatrixAt(i, dummy2.matrix);
-      });
-      vMesh.instanceMatrix.needsUpdate = true;
-      gridGroup.add(vMesh);
-    }
-    if (edges.h.length) {
-      const hMesh = new THREE.InstancedMesh(hGeo, mat, edges.h.length);
-      edges.h.forEach(([px, pz], i) => {
-        dummy2.position.set(px, y, pz);
-        dummy2.updateMatrix();
-        hMesh.setMatrixAt(i, dummy2.matrix);
-      });
-      hMesh.instanceMatrix.needsUpdate = true;
-      gridGroup.add(hMesh);
-    }
+    const place = (d, [px, pz]) => d.position.set(px, y, pz);
+    addChunkedInstances(gridGroup, edges.v, vGeo, mat, place);
+    addChunkedInstances(gridGroup, edges.h, hGeo, mat, place);
     return gridGroup;
   }
 
@@ -367,7 +389,6 @@ export function buildWorld(maze) {
   for (let x = 0; x < size; x++) bucket(maze.themeAt(x, 0)).h.push([x * C, -C / 2]);
   for (let y = 0; y < size; y++) bucket(maze.themeAt(0, y)).v.push([-C / 2, y * C]);
 
-  const dummy = new THREE.Object3D();
   const geoCache = new Map();
   function geosFor(height) {
     if (!geoCache.has(height)) {
@@ -383,57 +404,22 @@ export function buildWorld(maze) {
     const cfg = themes[theme];
     const { v, h } = wallBuckets[theme];
     const geos = geosFor(cfg.wallHeight);
-
-    if (v.length) {
-      const vMesh = new THREE.InstancedMesh(geos.v, cfg.wall, v.length);
-      v.forEach(([px, pz], i) => {
-        dummy.position.set(px, cfg.wallHeight / 2, pz);
-        dummy.updateMatrix();
-        vMesh.setMatrixAt(i, dummy.matrix);
-      });
-      vMesh.instanceMatrix.needsUpdate = true;
-      group.add(vMesh);
-    }
-    if (h.length) {
-      const hMesh = new THREE.InstancedMesh(geos.h, cfg.wall, h.length);
-      h.forEach(([px, pz], i) => {
-        dummy.position.set(px, cfg.wallHeight / 2, pz);
-        dummy.updateMatrix();
-        hMesh.setMatrixAt(i, dummy.matrix);
-      });
-      hMesh.instanceMatrix.needsUpdate = true;
-      group.add(hMesh);
-    }
+    const place = (d, [px, pz]) => d.position.set(px, cfg.wallHeight / 2, pz);
+    addChunkedInstances(group, v, geos.v, cfg.wall, place);
+    addChunkedInstances(group, h, geos.h, cfg.wall, place);
   }
 
   // ---------- Plinthes : relief réel au pied des murs (zones intérieures) ----------
   const baseboardColors = { backrooms: 0x4a3f1c, pool: 0x7d7a68, kitty: 0x7a3f57 };
   const baseboardVGeo = new THREE.BoxGeometry(WALL_THICKNESS + 0.03, 0.15, C);
   const baseboardHGeo = new THREE.BoxGeometry(C, 0.15, WALL_THICKNESS + 0.03);
+  const baseboardPlace = (d, [px, pz]) => d.position.set(px, 0.075, pz);
   for (const theme in baseboardColors) {
     const bucket2 = wallBuckets[theme];
     if (!bucket2) continue;
     const mat = new THREE.MeshStandardMaterial({ color: baseboardColors[theme], roughness: 0.85 });
-    if (bucket2.v.length) {
-      const vb = new THREE.InstancedMesh(baseboardVGeo, mat, bucket2.v.length);
-      bucket2.v.forEach(([px, pz], i) => {
-        dummy.position.set(px, 0.075, pz);
-        dummy.updateMatrix();
-        vb.setMatrixAt(i, dummy.matrix);
-      });
-      vb.instanceMatrix.needsUpdate = true;
-      group.add(vb);
-    }
-    if (bucket2.h.length) {
-      const hb = new THREE.InstancedMesh(baseboardHGeo, mat, bucket2.h.length);
-      bucket2.h.forEach(([px, pz], i) => {
-        dummy.position.set(px, 0.075, pz);
-        dummy.updateMatrix();
-        hb.setMatrixAt(i, dummy.matrix);
-      });
-      hb.instanceMatrix.needsUpdate = true;
-      group.add(hb);
-    }
+    addChunkedInstances(group, bucket2.v, baseboardVGeo, mat, baseboardPlace);
+    addChunkedInstances(group, bucket2.h, baseboardHGeo, mat, baseboardPlace);
   }
 
   // ---------- Néons plafonniers (uniquement zones "lights: true") ----------
@@ -601,7 +587,7 @@ export function buildWorld(maze) {
   const currentLampColor = followLight.color.clone();
 
   let t = 0;
-  function update(dt, cameraPosition) {
+  function update(dt, cameraPosition, camera) {
     t += dt;
     followLight.position.x = cameraPosition.x;
     followLight.position.z = cameraPosition.z;
@@ -629,6 +615,17 @@ export function buildWorld(maze) {
     fog.density += (cfg.fogDensity - fog.density) * lerpRate;
     currentLampColor.lerp(cfg.lightColor, lerpRate);
     followLight.color.copy(currentLampColor);
+
+    // Au-delà de cette distance le brouillard masque déjà tout : inutile de
+    // soumettre cette géométrie au moteur de rendu (moins de tris hors-écran).
+    if (camera) {
+      // FogExp2 utilise exp(-(density*distance)^2) : ~98% de brouillard vers
+      // distance = 2.0 / density, ce qui donne une limite bien plus courte
+      // dans les couloirs denses que dans les zones ouvertes (hôtel/quartier).
+      const targetFar = THREE.MathUtils.clamp(2.0 / fog.density, 20, 60);
+      camera.far += (targetFar - camera.far) * lerpRate;
+      camera.updateProjectionMatrix();
+    }
   }
 
   function setLampEnabled(enabled) {

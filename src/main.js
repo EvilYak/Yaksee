@@ -91,7 +91,7 @@ function tick() {
 
   if (started) {
     controls.update(dt);
-    world.update(dt, camera.position);
+    world.update(dt, camera.position, camera);
     hud.update(dt);
     postfx.update(t);
 

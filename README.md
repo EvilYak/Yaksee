@@ -115,6 +115,8 @@ src/hud.js                  incrustation caméscope (REC, timecode, batterie, to
   mais le brouillard cache la limite).
 - Éléments d'ambiance narrative (chaise déplacée, flaque, porte entrouverte).
 - Vraie capture audio binaurale / reverb selon la taille des pièces.
+- Occlusion réelle (murs qui bloquent la vue) en plus du frustum culling par
+  chunks déjà en place, pour couper encore plus de géométrie invisible.
 - Signature + publication sur le Play Store (icônes adaptatives, splash screen,
   version release signée) une fois l'APK debug validé.
 - D'autres poches thématiques (il suffit d'ajouter un rectangle dans `zones.js`
