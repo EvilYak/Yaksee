@@ -391,7 +391,7 @@ export function makeRoofMaterial() {
   ctx.fillRect(0, 0, size, size);
   addNoise(ctx, size, 10);
   const map = toTexture(canvas, 2, 2);
-  return new THREE.MeshStandardMaterial({ map, roughness: 0.9 });
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.9, side: THREE.DoubleSide });
 }
 
 export function makeWindowDecalMaterial(color = 0xffdf9e) {

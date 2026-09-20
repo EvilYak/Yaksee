@@ -116,30 +116,115 @@ function buildFloorWithHoles(size, C, holeRects, material) {
   return mesh;
 }
 
-function buildHouse({ width, wallHeight, depth, hue, roofMat }) {
+// Vrai toit à deux pans (deux plaques inclinées + pignons triangulaires),
+// au lieu d'un simple pavé posé à plat.
+function buildRoof(width, wallHeight, depth, roofRise, mat) {
+  const group = new THREE.Group();
+  const halfW = width / 2;
+  const slopeLen = Math.sqrt(halfW * halfW + roofRise * roofRise);
+  const angle = Math.atan2(roofRise, halfW);
+  const overhang = 0.35;
+  const slabGeo = new THREE.BoxGeometry(slopeLen + overhang, 0.1, depth + overhang);
+
+  const left = new THREE.Mesh(slabGeo, mat);
+  left.position.set(-halfW / 2, wallHeight + roofRise / 2, 0);
+  left.rotation.z = angle;
+  group.add(left);
+
+  const right = new THREE.Mesh(slabGeo, mat);
+  right.position.set(halfW / 2, wallHeight + roofRise / 2, 0);
+  right.rotation.z = -angle;
+  group.add(right);
+
+  const gableShape = new THREE.Shape();
+  gableShape.moveTo(-halfW, 0);
+  gableShape.lineTo(halfW, 0);
+  gableShape.lineTo(0, roofRise);
+  gableShape.closePath();
+  const gableGeo = new THREE.ShapeGeometry(gableShape);
+
+  const gableFront = new THREE.Mesh(gableGeo, mat);
+  gableFront.position.set(0, wallHeight, depth / 2);
+  group.add(gableFront);
+
+  const gableBack = new THREE.Mesh(gableGeo, mat);
+  gableBack.position.set(0, wallHeight, -depth / 2);
+  gableBack.rotation.y = Math.PI;
+  group.add(gableBack);
+
+  return group;
+}
+
+// Porte avec un vrai battant en relief (pas un simple décalque plat) + poignée.
+function buildDoor(width, height, mat) {
+  const group = new THREE.Group();
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.08), mat);
+  panel.position.z = 0.04;
+  group.add(panel);
+
+  const handle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.045, 8, 8),
+    new THREE.MeshStandardMaterial({ color: 0xd8c98a, metalness: 0.7, roughness: 0.3 }),
+  );
+  handle.position.set(width * 0.32, 0, 0.11);
+  group.add(handle);
+
+  return group;
+}
+
+// Fenêtre avec cadre saillant + appui, la vitre elle-même a un peu d'épaisseur.
+function buildWindow(width, height, paneColor, frameMat) {
+  const group = new THREE.Group();
+
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(width + 0.12, height + 0.12, 0.06), frameMat);
+  group.add(frame);
+
+  const pane = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.03), makeWindowDecalMaterial(paneColor));
+  pane.position.z = 0.025;
+  group.add(pane);
+
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(width + 0.24, 0.06, 0.16), frameMat);
+  sill.position.set(0, -height / 2 - 0.06, 0.08);
+  group.add(sill);
+
+  return group;
+}
+
+function buildHouse({ width, wallHeight, depth, roofRise, hue, roofMat }) {
   const group = new THREE.Group();
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(width, wallHeight, depth), makeHouseMaterial(hue));
   body.position.y = wallHeight / 2;
   group.add(body);
 
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(width * 1.12, 0.3, depth * 1.12), roofMat);
-  roof.position.y = wallHeight + 0.15;
-  group.add(roof);
+  group.add(buildRoof(width, wallHeight, depth, roofRise, roofMat));
 
-  const door = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.9), makeDoorDecalMaterial());
-  door.position.set(0, 0.95, depth / 2 + 0.02);
+  const door = buildDoor(0.9, 1.9, makeDoorDecalMaterial());
+  door.position.set(0, 0.95, depth / 2);
   group.add(door);
 
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f2ea, roughness: 0.7 });
   const litColors = [0xffdf9e, 0xffdf9e, 0x9fc7e8];
   [-1, 1].forEach((side) => {
     const lit = Math.random() < 0.65;
     const c = lit ? litColors[Math.floor(Math.random() * litColors.length)] : 0x2a2a24;
-    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.05), makeWindowDecalMaterial(c));
-    win.position.set(side * width * 0.28, wallHeight * 0.62, depth / 2 + 0.02);
+    const win = buildWindow(0.85, 1.05, c, frameMat);
+    win.position.set(side * width * 0.28, wallHeight * 0.62, depth / 2);
     group.add(win);
   });
 
+  return group;
+}
+
+// Miroir avec un vrai cadre en relief (tore) au lieu d'un simple disque plat.
+function buildMirror(glassMat, frameMat) {
+  const group = new THREE.Group();
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.4, 24), glassMat);
+  group.add(glass);
+  const frame = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.045, 8, 24), frameMat);
+  frame.position.z = -0.015;
+  group.add(frame);
+  group.scale.set(1, 1.4, 1);
   return group;
 }
 
@@ -265,6 +350,36 @@ export function buildWorld(maze) {
     }
   }
 
+  // ---------- Plinthes : relief réel au pied des murs (zones intérieures) ----------
+  const baseboardColors = { backrooms: 0x4a3f1c, pool: 0x7d7a68, kitty: 0x7a3f57 };
+  const baseboardVGeo = new THREE.BoxGeometry(WALL_THICKNESS + 0.03, 0.15, C);
+  const baseboardHGeo = new THREE.BoxGeometry(C, 0.15, WALL_THICKNESS + 0.03);
+  for (const theme in baseboardColors) {
+    const bucket2 = wallBuckets[theme];
+    if (!bucket2) continue;
+    const mat = new THREE.MeshStandardMaterial({ color: baseboardColors[theme], roughness: 0.85 });
+    if (bucket2.v.length) {
+      const vb = new THREE.InstancedMesh(baseboardVGeo, mat, bucket2.v.length);
+      bucket2.v.forEach(([px, pz], i) => {
+        dummy.position.set(px, 0.075, pz);
+        dummy.updateMatrix();
+        vb.setMatrixAt(i, dummy.matrix);
+      });
+      vb.instanceMatrix.needsUpdate = true;
+      group.add(vb);
+    }
+    if (bucket2.h.length) {
+      const hb = new THREE.InstancedMesh(baseboardHGeo, mat, bucket2.h.length);
+      bucket2.h.forEach(([px, pz], i) => {
+        dummy.position.set(px, 0.075, pz);
+        dummy.updateMatrix();
+        hb.setMatrixAt(i, dummy.matrix);
+      });
+      hb.instanceMatrix.needsUpdate = true;
+      group.add(hb);
+    }
+  }
+
   // ---------- Néons plafonniers (uniquement zones "lights: true") ----------
   const stripGeo = new THREE.PlaneGeometry(1.7, 0.22);
   const stripPositions = [];
@@ -303,6 +418,22 @@ export function buildWorld(maze) {
   strips.instanceColor.needsUpdate = true;
   group.add(strips);
 
+  // Caisson (troffer) en relief autour de chaque néon, pour un vrai encastrement
+  // plutôt qu'un simple plan lumineux plaqué au plafond.
+  if (stripPositions.length) {
+    const housingGeo = new THREE.BoxGeometry(1.94, 0.08, 0.46);
+    const housingMat = new THREE.MeshStandardMaterial({ color: 0x2b2b28, roughness: 0.7 });
+    const housing = new THREE.InstancedMesh(housingGeo, housingMat, stripPositions.length);
+    stripPositions.forEach(([px, pz, rotated], i) => {
+      dummy.position.set(px, WALL_HEIGHT - 0.1, pz);
+      dummy.rotation.set(0, rotated ? Math.PI / 2 : 0, 0);
+      dummy.updateMatrix();
+      housing.setMatrixAt(i, dummy.matrix);
+    });
+    housing.instanceMatrix.needsUpdate = true;
+    group.add(housing);
+  }
+
   // ---------- Quartier pavillonnaire : maisons + réverbères ----------
   const roofMat = makeRoofMaterial();
   const nbhd = rectWorldExtent(ZONES.neighborhood.rect, C);
@@ -317,7 +448,7 @@ export function buildWorld(maze) {
   ];
   houseSpots.forEach(([hx, hz, ry]) => {
     const hue = Math.random() < 0.82 ? 95 + Math.random() * 45 : 195 + Math.random() * 20;
-    const house = buildHouse({ width: 4.4, wallHeight: 3.1, depth: 5.2, hue, roofMat });
+    const house = buildHouse({ width: 4.4, wallHeight: 3.1, depth: 5.2, roofRise: 1.5, hue, roofMat });
     house.position.set(hx, 0, hz);
     house.rotation.y = ry;
     group.add(house);
@@ -337,8 +468,27 @@ export function buildWorld(maze) {
     group.add(planter);
   });
 
-  // ---------- Kitty : miroirs ovals accrochés aux murs ----------
-  const mirrorMat = makeMirrorDecalMaterial();
+  // Bandeaux de façade en relief (marquent les étages), pas juste de la texture plate.
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xb7afa0, roughness: 0.6 });
+  const trimThickness = WALL_THICKNESS + 0.12;
+  [2.6, 5.0].forEach((ty) => {
+    const north = new THREE.Mesh(new THREE.BoxGeometry(htl.w, 0.22, trimThickness), trimMat);
+    north.position.set(htl.cx, ty, htl.minZ);
+    group.add(north);
+    const south = north.clone();
+    south.position.z = htl.maxZ;
+    group.add(south);
+    const west = new THREE.Mesh(new THREE.BoxGeometry(trimThickness, 0.22, htl.h), trimMat);
+    west.position.set(htl.minX, ty, htl.cz);
+    group.add(west);
+    const east = west.clone();
+    east.position.x = htl.maxX;
+    group.add(east);
+  });
+
+  // ---------- Kitty : miroirs ovals (cadre en relief) accrochés aux murs ----------
+  const mirrorGlassMat = makeMirrorDecalMaterial();
+  const mirrorFrameMat = new THREE.MeshStandardMaterial({ color: 0xcfa15a, metalness: 0.6, roughness: 0.35 });
   const kittyWalls = wallBuckets.kitty;
   if (kittyWalls) {
     const pick = (arr, n) => {
@@ -350,16 +500,14 @@ export function buildWorld(maze) {
       return out;
     };
     pick(kittyWalls.v, 4).forEach(([px, pz]) => {
-      const mirror = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), mirrorMat);
-      mirror.scale.set(1, 1.4, 1);
-      mirror.position.set(px + (Math.random() < 0.5 ? 0.09 : -0.09), 1.55, pz);
+      const mirror = buildMirror(mirrorGlassMat, mirrorFrameMat);
+      mirror.position.set(px + (Math.random() < 0.5 ? 0.1 : -0.1), 1.55, pz);
       mirror.rotation.y = Math.PI / 2;
       group.add(mirror);
     });
     pick(kittyWalls.h, 4).forEach(([px, pz]) => {
-      const mirror = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), mirrorMat);
-      mirror.scale.set(1, 1.4, 1);
-      mirror.position.set(px, 1.55, pz + (Math.random() < 0.5 ? 0.09 : -0.09));
+      const mirror = buildMirror(mirrorGlassMat, mirrorFrameMat);
+      mirror.position.set(px, 1.55, pz + (Math.random() < 0.5 ? 0.1 : -0.1));
       group.add(mirror);
     });
   }

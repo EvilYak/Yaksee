@@ -20,6 +20,11 @@ cachées dans les coins de la carte :
 Chaque zone teinte progressivement le brouillard et la lumière portée par le
 joueur en s'en approchant, pour une transition douce entre les ambiances.
 
+Le décor est en vraie géométrie 3D, pas juste des textures plaquées : toits à
+deux pans avec pignons, fenêtres à cadre/vitre/appui en relief, portes avec
+poignée, miroirs à cadre, plinthes au pied de tous les murs de couloir et
+caissons encastrés autour des néons.
+
 Techno : [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/), 100%
 navigateur, jouable au téléphone (et installable en PWA sur l'écran d'accueil).
 Toutes les textures et tous les sons sont générés en code (canvas 2D / Web Audio),
@@ -44,6 +49,37 @@ npm run preview -- --host
 
 Le dossier `dist/` généré est un site statique déployable tel quel (Netlify,
 Vercel, GitHub Pages, etc.).
+
+## APK Android
+
+Le projet natif Android (Capacitor) est déjà généré dans `android/` — il n'y a
+pas besoin de relancer `npx cap add android`. Je n'ai **pas pu compiler le
+.apk directement dans cette session** : la sandbox où je tourne bloque l'accès
+réseau à `dl.google.com` (le dépôt Maven de Google, nécessaire pour l'Android
+Gradle Plugin et le SDK — j'ai vérifié, c'est un 403 explicite de la politique
+réseau de l'environnement, pas un bug du projet).
+
+Pour obtenir le `.apk` toi-même, deux options, chez toi où Google n'est pas
+bloqué :
+
+1. **Le plus simple** : installe [Android Studio](https://developer.android.com/studio),
+   ouvre le dossier `android/`, laisse-le synchroniser Gradle, puis
+   `Build > Build Bundle(s) / APK(s) > Build APK(s)`. L'APK signé debug apparaît
+   dans `android/app/build/outputs/apk/debug/`.
+2. **En ligne de commande** (avec un SDK Android installé et `ANDROID_HOME`
+   défini) :
+   ```bash
+   npm run build
+   npx cap sync android
+   cd android
+   ./gradlew assembleDebug
+   ```
+   L'APK est généré dans `android/app/build/outputs/apk/debug/app-debug.apk`,
+   installable directement sur un téléphone (active "Sources inconnues").
+
+Après toute modification du code web, relance `npm run build && npx cap sync
+android` avant de rebuilder l'APK, pour que le natif embarque la dernière
+version du site.
 
 ## Contrôles
 
@@ -77,7 +113,8 @@ src/hud.js                  incrustation caméscope (REC, timecode, batterie, to
   mais le brouillard cache la limite).
 - Éléments d'ambiance narrative (chaise déplacée, flaque, porte entrouverte).
 - Vraie capture audio binaurale / reverb selon la taille des pièces.
-- Version app native (Capacitor) pour publication sur store, si besoin.
+- Signature + publication sur le Play Store (icônes adaptatives, splash screen,
+  version release signée) une fois l'APK debug validé.
 - D'autres poches thématiques (il suffit d'ajouter un rectangle dans `zones.js`
   + un thème de matériaux dans `world.js`).
 

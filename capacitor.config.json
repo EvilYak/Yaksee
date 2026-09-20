@@ -1,0 +1,9 @@
+{
+  "appId": "com.noclip.backrooms",
+  "appName": "NO CLIP",
+  "webDir": "dist",
+  "backgroundColor": "#050503",
+  "android": {
+    "allowMixedContent": false
+  }
+}
