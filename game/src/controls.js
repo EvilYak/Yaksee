@@ -110,18 +110,49 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   lookZone.addEventListener('pointercancel', endLook);
 
   // ---------- Souris + clavier (bureau) ----------
+  // Pointer Lock : un clic verrouille le curseur et la souris tourne la caméra
+  // librement (standard FPS PC), sans avoir à maintenir le bouton enfoncé.
+  // Repli sur le glisser-déposer si le navigateur refuse/n'a pas l'API.
   const MOUSE_SENS = 0.0026;
+  const DRAG_SENS = 0.0026;
   let mouseDown = false;
+  let pointerLockSupported = 'pointerLockElement' in document;
+
+  function isDesktop() {
+    return window.innerWidth >= 900;
+  }
+
+  function requestLock() {
+    if (!pointerLockSupported || !isDesktop()) return;
+    if (document.pointerLockElement === app) return;
+    app.requestPointerLock();
+  }
+
+  app.addEventListener('click', requestLock);
+
+  document.addEventListener('pointerlockerror', () => {
+    // L'API a été refusée (p.ex. iframe sandbox) : on bascule sur le
+    // repli glisser-déposer ci-dessous.
+    pointerLockSupported = false;
+  });
+
   app.addEventListener('mousedown', () => {
-    if (window.innerWidth < 900) return;
+    if (!isDesktop()) return;
     mouseDown = true;
   });
   window.addEventListener('mouseup', () => (mouseDown = false));
   window.addEventListener('mousemove', (e) => {
-    if (!mouseDown || window.innerWidth < 900) return;
-    yaw -= e.movementX * MOUSE_SENS;
-    pitch -= e.movementY * MOUSE_SENS;
-    pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    if (!isDesktop()) return;
+    const locked = document.pointerLockElement === app;
+    if (locked) {
+      yaw -= e.movementX * MOUSE_SENS;
+      pitch -= e.movementY * MOUSE_SENS;
+      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    } else if (!pointerLockSupported && mouseDown) {
+      yaw -= e.movementX * DRAG_SENS;
+      pitch -= e.movementY * DRAG_SENS;
+      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    }
   });
   window.addEventListener('keydown', (e) => keys.add(e.code));
   window.addEventListener('keyup', (e) => keys.delete(e.code));
