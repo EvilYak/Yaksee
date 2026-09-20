@@ -18,22 +18,25 @@ function smootherstep(t) {
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
+// Grille bouclée (wrap-around) : g[cells] === g[0] implicitement via le
+// modulo, donc le résultat s'accorde parfaitement avec lui-même une fois
+// répété (texture.repeat) — pas de raccord visible ni de motif qui "saute".
 function valueNoiseLayer(size, cells, rand) {
-  const g = new Float32Array((cells + 1) * (cells + 1));
+  const g = new Float32Array(cells * cells);
   for (let i = 0; i < g.length; i++) g[i] = rand();
   const out = new Float32Array(size * size);
   for (let py = 0; py < size; py++) {
     const fy = (py / size) * cells;
-    const y0 = Math.floor(fy);
-    const y1 = Math.min(cells, y0 + 1);
-    const ty = smootherstep(fy - y0);
+    const y0 = Math.floor(fy) % cells;
+    const y1 = (y0 + 1) % cells;
+    const ty = smootherstep(fy - Math.floor(fy));
     for (let px = 0; px < size; px++) {
       const fx = (px / size) * cells;
-      const x0 = Math.floor(fx);
-      const x1 = Math.min(cells, x0 + 1);
-      const tx = smootherstep(fx - x0);
-      const a = g[y0 * (cells + 1) + x0] * (1 - tx) + g[y0 * (cells + 1) + x1] * tx;
-      const b = g[y1 * (cells + 1) + x0] * (1 - tx) + g[y1 * (cells + 1) + x1] * tx;
+      const x0 = Math.floor(fx) % cells;
+      const x1 = (x0 + 1) % cells;
+      const tx = smootherstep(fx - Math.floor(fx));
+      const a = g[y0 * cells + x0] * (1 - tx) + g[y0 * cells + x1] * tx;
+      const b = g[y1 * cells + x0] * (1 - tx) + g[y1 * cells + x1] * tx;
       out[py * size + px] = a * (1 - ty) + b * ty;
     }
   }
@@ -150,8 +153,10 @@ export function makeWallpaperMaterial() {
   bctx.fillRect(0, 0, 256, 256);
   addNoise(bctx, 256, 55);
 
-  const map = toTexture(canvas, 4, 2.2);
-  const bumpMap = toBumpTexture(bump, 4, 2.2);
+  // Une tuile = un pan de mur entier (pas de répétition visible dans un même
+  // pan) ; le bump, sans grosses taches, peut se répéter plus fin sans se voir.
+  const map = toTexture(canvas, 1, 1);
+  const bumpMap = toBumpTexture(bump, 3, 2);
 
   return new THREE.MeshStandardMaterial({
     map,
@@ -171,8 +176,10 @@ export function makeCarpetMaterial() {
   ctx.fillRect(0, 0, size, size);
 
   // Usure inégale (zones de passage plus sombres/tassées) avant le grain fin.
-  grungeTint(ctx, size, { color: [45, 38, 16], strength: 0.4, cells: 4, octaves: 3 });
-  grungeTint(ctx, size, { color: [110, 96, 50], strength: 0.15, cells: 8, octaves: 2 });
+  // repeat(18,18) sur tout le sol : cells élevé pour que ce soit du grain
+  // d'usure, pas une même tache qui reviendrait 18 fois de suite.
+  grungeTint(ctx, size, { color: [45, 38, 16], strength: 0.4, cells: 10, octaves: 3 });
+  grungeTint(ctx, size, { color: [110, 96, 50], strength: 0.15, cells: 16, octaves: 2 });
 
   // Motif "moquette de bureau" : petit damier bruité (structure des dalles).
   const cell = 8;
@@ -269,7 +276,9 @@ function tileCanvas({ base, grout, stainColor, tilesPerSide = 8, stainCount = 5 
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
 
-  grungeTint(ctx, size, { color: [70, 75, 55], strength: 0.16, cells: 4, octaves: 3 });
+  // cells plus élevé = grain plus fin : un carrelage peut répéter sa grille
+  // (réaliste), mais pas la même grosse tache organique à chaque répétition.
+  grungeTint(ctx, size, { color: [70, 75, 55], strength: 0.14, cells: 9, octaves: 3 });
 
   const cell = size / tilesPerSide;
   for (let y = 0; y < tilesPerSide; y++) {
@@ -548,7 +557,7 @@ export function makeKittyWallpaperMaterial() {
   }
   addNoise(ctx, size, 8);
 
-  const map = toTexture(canvas, 4, 2.2);
+  const map = toTexture(canvas, 1, 1);
   return new THREE.MeshStandardMaterial({ map, roughness: 0.7, metalness: 0.05 });
 }
 

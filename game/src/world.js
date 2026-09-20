@@ -29,7 +29,7 @@ const WALL_THICKNESS = 0.12;
 function buildThemeConfig() {
   return {
     backrooms: {
-      wall: makeWallpaperMaterial(),
+      wall: [makeWallpaperMaterial(), makeWallpaperMaterial(), makeWallpaperMaterial()],
       floor: makeCarpetMaterial(),
       ceiling: makeCeilingMaterial(),
       lightColor: new THREE.Color(0xfff6d8),
@@ -49,7 +49,7 @@ function buildThemeConfig() {
       lights: true,
     },
     kitty: {
-      wall: makeKittyWallpaperMaterial(),
+      wall: [makeKittyWallpaperMaterial(), makeKittyWallpaperMaterial(), makeKittyWallpaperMaterial()],
       floor: makeKittyCarpetMaterial(),
       ceiling: makeKittyCeilingMaterial(),
       lightColor: new THREE.Color(0xffd3ec),
@@ -293,10 +293,22 @@ export function buildWorld(maze) {
     }
     return map;
   }
+  // Un même matériau répété sur toute la carte se voit immédiatement (le
+  // même motif de taches revient à chaque pan de mur) — quand `material`
+  // est un tableau de variantes, chaque chunk en tire une au hasard, mais de
+  // façon stable (hash de sa clé) pour ne pas changer d'une frame à l'autre.
+  function pickVariant(material, key) {
+    if (!Array.isArray(material)) return material;
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+    return material[Math.abs(h) % material.length];
+  }
+
   function addChunkedInstances(targetGroup, list, geometry, material, placeFn) {
     if (!list.length) return;
-    groupByChunk(list).forEach((entries) => {
-      const mesh = new THREE.InstancedMesh(geometry, material, entries.length);
+    groupByChunk(list).forEach((entries, key) => {
+      const mat = pickVariant(material, key);
+      const mesh = new THREE.InstancedMesh(geometry, mat, entries.length);
       entries.forEach((entry, i) => {
         placeFn(dummy, entry);
         dummy.updateMatrix();
