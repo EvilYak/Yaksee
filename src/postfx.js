@@ -88,5 +88,9 @@ export function createPostFX(renderer, scene, camera) {
     fxPass.uniforms.uTime.value = t;
   }
 
-  return { composer, setSize, update };
+  function setEnabled(enabled) {
+    fxPass.enabled = enabled;
+  }
+
+  return { composer, setSize, update, setEnabled };
 }

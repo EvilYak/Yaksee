@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { generateMaze } from './maze.js';
 import { buildWorld } from './world.js';
+import { GRID_SIZE, CELL_SIZE } from './zones.js';
 import { createControls } from './controls.js';
 import { createAudio } from './audio.js';
 import { createPostFX } from './postfx.js';
@@ -9,6 +10,8 @@ import { createHud } from './hud.js';
 const canvas = document.getElementById('scene');
 const bootScreen = document.getElementById('boot-screen');
 const startBtn = document.getElementById('start-btn');
+const vhsBtn = document.getElementById('toggle-vhs');
+const lampBtn = document.getElementById('toggle-lamp');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -18,9 +21,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 34);
+const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 60);
 
-const maze = generateMaze(24, 3.2, Date.now() & 0xffffffff);
+const maze = generateMaze(GRID_SIZE, CELL_SIZE, Date.now() & 0xffffffff);
 const world = buildWorld(maze);
 scene.add(world.group);
 scene.fog = world.fog;
@@ -50,6 +53,20 @@ function onResize() {
 }
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
+
+let vhsOn = true;
+vhsBtn.addEventListener('click', () => {
+  vhsOn = !vhsOn;
+  postfx.setEnabled(vhsOn);
+  vhsBtn.classList.toggle('active', vhsOn);
+});
+
+let lampOn = true;
+lampBtn.addEventListener('click', () => {
+  lampOn = !lampOn;
+  world.setLampEnabled(lampOn);
+  lampBtn.classList.toggle('active', lampOn);
+});
 
 let started = false;
 startBtn.addEventListener('click', () => {
