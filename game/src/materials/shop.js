@@ -178,3 +178,67 @@ export function makeCarPaintMaterial(hex = '#c7c2b0') {
   return new THREE.MeshStandardMaterial({ color: hex, roughness: 0.35, metalness: 0.5 });
 }
 
+// Cadres muraux achetables : de simples dessins au trait sur un fond de
+// cadre, pas des photos — l'ambiance "magicien" vient du motif, pas d'une
+// image réelle.
+export function makeFrameMaterial(variant = null) {
+  const size = 512;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#f0e6c8';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = '#3a2f1a';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(16, 16, size - 32, size - 32);
+  ctx.strokeStyle = '#141210';
+  ctx.fillStyle = '#141210';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (variant === 0) {
+    // Chapeau + baguette croisée + étincelle.
+    ctx.fillRect(size * 0.34, size * 0.42, size * 0.32, size * 0.2);
+    ctx.fillRect(size * 0.26, size * 0.6, size * 0.48, size * 0.07);
+    ctx.save();
+    ctx.translate(size * 0.5, size * 0.42);
+    ctx.rotate(-0.55);
+    ctx.fillRect(-size * 0.28, -size * 0.015, size * 0.56, size * 0.03);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(size * 0.72, size * 0.24, size * 0.025, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(size * 0.66, size * 0.32, size * 0.015, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (variant === 1) {
+    // Lapin qui sort du chapeau.
+    ctx.fillRect(size * 0.32, size * 0.55, size * 0.36, size * 0.18);
+    ctx.beginPath();
+    ctx.ellipse(size * 0.5, size * 0.42, size * 0.11, size * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    [-1, 1].forEach((side) => {
+      ctx.save();
+      ctx.translate(size * 0.5 + side * size * 0.05, size * 0.22);
+      ctx.rotate(side * 0.15);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * 0.025, size * 0.11, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  } else if (variant === 2) {
+    // Éventail de cartes.
+    for (let i = -2; i <= 2; i++) {
+      ctx.save();
+      ctx.translate(size * 0.5, size * 0.58);
+      ctx.rotate(i * 0.22);
+      ctx.strokeRect(-size * 0.09, -size * 0.24, size * 0.18, size * 0.28);
+      ctx.restore();
+    }
+  }
+  // variant absent/inconnu : cadre vide (juste la bordure), en attente d'achat.
+
+  const map = toTexture(c, 1, 1);
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.85 });
+}
+

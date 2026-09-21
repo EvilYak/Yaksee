@@ -14,6 +14,7 @@ import {
   makePotMaterial,
   makeFoliageMaterial,
   makeCarPaintMaterial,
+  makeFrameMaterial,
 } from '../materials/index.js';
 import { buildCharacterBody } from './character.js';
 import { ITEMS } from '../economy.js';
@@ -264,6 +265,17 @@ export function buildShopWorld() {
   group.add(backWallMain);
   colliders.push({ minX: rx0, maxX: rx1, minZ: rz1 - WALL_T / 2, maxZ: rz1 + WALL_T / 2 });
 
+  // Cadres muraux vides, à remplir depuis la caisse (voir decor.js) —
+  // rotation.y=PI comme le tableau noir : sans ça ils regarderaient dans le
+  // mur au lieu de la pièce (même piège que l'enseigne/tableau plus tôt).
+  const frames = [-3, 0, 3].map((x) => {
+    const frame = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), makeFrameMaterial());
+    frame.position.set(x, 1.7, rz1 - WALL_T / 2 - 0.05);
+    frame.rotation.y = Math.PI;
+    group.add(frame);
+    return frame;
+  });
+
   const leftWall = wallWithGap('z', rz1 - rz0, WALL_H, WALL_T, brickMat, 0, 0);
   leftWall.position.set(rx0, 0, 0);
   group.add(leftWall);
@@ -442,8 +454,41 @@ export function buildShopWorld() {
   staffDoorPanel.rotation.y = Math.PI / 2;
   group.add(staffDoorPanel);
 
+  // Placard de ménage (balai + débouche-chiotte), dans le fond de
+  // l'arrière-boutique déjà réservée au personnel — assez loin du mur
+  // partagé avec la réception pour que son rayon d'interaction ne
+  // chevauche jamais numériquement celui de la caisse de l'autre côté.
+  const closetMat = new THREE.MeshStandardMaterial({ color: 0x4a3a28, roughness: 0.8 });
+  const closet = box(0.7, 1.9, 0.4, closetMat);
+  closet.position.set(7.5, 0.95, bz0 + 0.25);
+  group.add(closet);
+  addCollider(closet, 7.5, bz0 + 0.25);
+  const closetPoint = { x: 7.5, z: bz0 + 0.9, radius: 1.0 };
+
+  // ---------- Taches à nettoyer (réception) ----------
+  const cleaningSpots = [
+    { x: -1.6, z: 1.4, type: 'dirt' },
+    { x: 1.2, z: 0.6, type: 'dirt' },
+    { x: -0.4, z: -2.2, type: 'dirt' },
+    { x: 2.6, z: 1.8, type: 'dirt' },
+    { x: rx0 + 1.0, z: -2.9, type: 'poop' },
+    { x: rx0 + 1.6, z: -2.9, type: 'poop' },
+  ];
+
   const startWorldPos = new THREE.Vector3(0, 0, -9);
   const startYaw = Math.PI;
 
-  return { group, colliders, registerPoint, phonePoint, trashPoint, npc, startWorldPos, startYaw };
+  return {
+    group,
+    colliders,
+    registerPoint,
+    phonePoint,
+    trashPoint,
+    closetPoint,
+    npc,
+    frames,
+    cleaningSpots,
+    startWorldPos,
+    startYaw,
+  };
 }

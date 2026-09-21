@@ -18,4 +18,5 @@ export {
   makePotMaterial,
   makeFoliageMaterial,
   makeCarPaintMaterial,
+  makeFrameMaterial,
 } from './shop.js';

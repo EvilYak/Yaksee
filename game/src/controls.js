@@ -1,14 +1,19 @@
 import * as THREE from 'three';
 
 const EYE_HEIGHT = 1.65;
+const CROUCH_HEIGHT = 1.05;
 const PLAYER_RADIUS = 0.35;
 const WALK_SPEED = 2.3;
 const RUN_SPEED = 4.2;
+const CROUCH_SPEED = 1.3;
+const JUMP_SPEED = 3.6;
+const GRAVITY = 9.8;
 
 const GAMEPAD_DEADZONE = 0.16;
 const GAMEPAD_LOOK_SPEED = 2.6;
 const GAMEPAD_SPRINT_BUTTON = 0; // A / Cross
 const GAMEPAD_INTERACT_BUTTON = 2; // X / Square
+const GAMEPAD_JUMP_BUTTON = 3; // Y / Triangle
 
 function applyDeadzone(v, dz = GAMEPAD_DEADZONE) {
   if (Math.abs(v) < dz) return 0;
@@ -27,6 +32,9 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
   let pitch = 0;
   let bobPhase = 0;
   let bobLast = 0;
+  let jumpOffset = 0;
+  let jumpVelocity = 0;
+  let grounded = true;
 
   let sensitivity = 1;
   let invertY = 1;
@@ -44,7 +52,15 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
 
   const moveVec = { x: 0, y: 0 };
   let joyMagnitude = 0;
+  let touchJumpHeld = false;
   const keys = new Set();
+
+  const touchJumpBtn = document.getElementById('touch-jump');
+  if (touchJumpBtn) {
+    touchJumpBtn.addEventListener('pointerdown', () => (touchJumpHeld = true));
+    touchJumpBtn.addEventListener('pointerup', () => (touchJumpHeld = false));
+    touchJumpBtn.addEventListener('pointercancel', () => (touchJumpHeld = false));
+  }
 
   // ---------- Joystick tactile ----------
   let joyPointerId = null;
@@ -181,13 +197,14 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
 
   function pollGamepad() {
     const pad = firstGamepad();
-    if (!pad) return { x: 0, y: 0, lookX: 0, lookY: 0, sprint: false };
+    if (!pad) return { x: 0, y: 0, lookX: 0, lookY: 0, sprint: false, jump: false };
     const x = applyDeadzone(pad.axes[0] || 0);
     const y = -applyDeadzone(pad.axes[1] || 0);
     const lookX = applyDeadzone(pad.axes[2] || 0);
     const lookY = applyDeadzone(pad.axes[3] || 0);
     const sprint = !!(pad.buttons[GAMEPAD_SPRINT_BUTTON] && pad.buttons[GAMEPAD_SPRINT_BUTTON].pressed);
-    return { x, y, lookX, lookY, sprint };
+    const jump = !!(pad.buttons[GAMEPAD_JUMP_BUTTON] && pad.buttons[GAMEPAD_JUMP_BUTTON].pressed);
+    return { x, y, lookX, lookY, sprint, jump };
   }
 
   // Bouton d'interaction : détecté indépendamment de update() (donc même
@@ -247,8 +264,24 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
     const inY = THREE.MathUtils.clamp(moveVec.y + kb.y + gp.y, -1, 1);
     const speedScale = Math.min(1, Math.hypot(inX, inY));
 
-    const sprinting = keys.has('ShiftLeft') || keys.has('ShiftRight') || joyMagnitude > JOY_RUN_THRESHOLD || gp.sprint;
-    const moveSpeed = sprinting ? RUN_SPEED : WALK_SPEED;
+    const crouching = keys.has('KeyC') || keys.has('ControlLeft');
+    const sprinting = !crouching && (keys.has('ShiftLeft') || keys.has('ShiftRight') || joyMagnitude > JOY_RUN_THRESHOLD || gp.sprint);
+    const moveSpeed = crouching ? CROUCH_SPEED : sprinting ? RUN_SPEED : WALK_SPEED;
+
+    // Saut : vitesse verticale initiale puis gravité, "physique rigolote"
+    // assumée (pas de vrai moteur physique) — on ne fait que déplacer la
+    // caméra, la collision reste purement horizontale (XZ).
+    if ((keys.has('Space') || gp.jump || touchJumpHeld) && grounded) {
+      jumpVelocity = JUMP_SPEED;
+      grounded = false;
+    }
+    jumpVelocity -= GRAVITY * dt;
+    jumpOffset += jumpVelocity * dt;
+    if (jumpOffset <= 0) {
+      jumpOffset = 0;
+      jumpVelocity = 0;
+      grounded = true;
+    }
 
     const sinY = Math.sin(yaw);
     const cosY = Math.cos(yaw);
@@ -280,12 +313,13 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
       bobLast = 0;
     }
 
-    camera.position.set(position.x + bobX, EYE_HEIGHT + bobY, position.z);
+    const eyeHeight = crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
+    camera.position.set(position.x + bobX, eyeHeight + bobY + jumpOffset, position.z);
     camera.rotation.order = 'YXZ';
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
 
-    return { moving: speedScale > 0.05, sprinting, position };
+    return { moving: speedScale > 0.05, sprinting, crouching, position };
   }
 
   return { update, position, setSensitivity, setInvertY, pollInteractPressed };

@@ -64,13 +64,27 @@ html, body {
   position: absolute;
   top: max(16px, env(safe-area-inset-top));
   left: 16px;
+  max-width: 60vw;
+}
+
+#objective-main {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   font-size: 15px;
   letter-spacing: 0.5px;
-  max-width: 60vw;
   line-height: 1.3;
+}
+
+#objective-sub {
+  margin: 4px 0 0 21px;
+  font-size: 12px;
+  opacity: 0.75;
+  letter-spacing: 0.5px;
+}
+
+#objective-sub.hidden {
+  display: none;
 }
 
 #objective-icon {
@@ -148,6 +162,28 @@ html, body {
 }
 
 #interact-hint.hidden {
+  display: none;
+}
+
+#tool-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #eef0d8;
+  font-size: 14px;
+  letter-spacing: 1px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(238, 240, 216, 0.35);
+  border-radius: 3px;
+  padding: 6px 12px;
+}
+
+#tool-hint.hidden {
   display: none;
 }
 
@@ -332,7 +368,8 @@ html, body {
 /* ---------- Panneaux (caisse / poubelle) ---------- */
 
 #register-panel,
-#trash-panel {
+#trash-panel,
+#closet-panel {
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -345,12 +382,14 @@ html, body {
 }
 
 #register-panel.hidden,
-#trash-panel.hidden {
+#trash-panel.hidden,
+#closet-panel.hidden {
   display: none;
 }
 
 #register-card,
-#trash-card {
+#trash-card,
+#closet-card {
   width: min(420px, 100%);
   max-height: 80vh;
   overflow-y: auto;
@@ -362,12 +401,20 @@ html, body {
 }
 
 #register-title,
-#trash-title {
+#trash-title,
+#closet-title {
   font-size: 14px;
   letter-spacing: 4px;
   opacity: 0.85;
   margin-bottom: 4px;
   text-align: center;
+}
+
+#closet-current {
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.8;
+  margin: 10px 0 16px;
 }
 
 #register-money {
@@ -386,7 +433,9 @@ html, body {
 
 #register-order,
 #register-stock,
-#trash-list {
+#register-decor,
+#trash-list,
+#closet-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -426,7 +475,8 @@ html, body {
 }
 
 #register-close,
-#trash-close {
+#trash-close,
+#closet-close {
   width: 100%;
   margin-top: 18px;
   padding: 11px;
@@ -508,6 +558,12 @@ html, body {
   color: #eef0d8;
   text-align: center;
   padding: 24px;
+}
+
+#boot-logo {
+  width: 96px;
+  height: 72px;
+  margin-bottom: 4px;
 }
 
 #boot-title {
@@ -618,6 +674,21 @@ html, body {
 
 #touch-interact.hidden {
   display: none;
+}
+
+#touch-jump {
+  position: absolute;
+  right: 24px;
+  bottom: 62%;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  pointer-events: auto;
+  font-family: inherit;
+  font-size: 18px;
+  color: #141210;
+  background: rgba(238, 240, 216, 0.7);
+  border: none;
 }
 
 @media (min-width: 900px) {
