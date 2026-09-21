@@ -4,13 +4,17 @@ import { createControls } from './controls.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { createDialogue } from './dialogue.js';
-import { ITEMS, createStock } from './economy.js';
+import { createStock } from './economy.js';
 import { createCustomerManager } from './customers.js';
 import { createShift } from './shift.js';
-import { TOOL_LABELS, attachHeldTool, createThrownProjectile, updateProjectile } from './tools.js';
 import { createCleaningSystem } from './cleaning.js';
-import { createDecorState, FRAME_PRICE, FRAME_COUNT } from './decor.js';
-import { makeFrameMaterial } from './materials/index.js';
+import { createDecorState } from './decor.js';
+import { createSettingsPanel } from './settings.js';
+import { createRegisterPanel } from './panels/registerPanel.js';
+import { createTrashPanel } from './panels/trashPanel.js';
+import { createClosetPanel } from './panels/closetPanel.js';
+import { createToolRuntime } from './toolRuntime.js';
+import { createShiftEndScreen } from './shiftEnd.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -63,6 +67,13 @@ camera.add(flashlight.target);
 flashlight.target.position.set(0.1, -0.15, -3);
 flashlight.visible = flashlightOn;
 
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyF') {
+    flashlightOn = !flashlightOn;
+    flashlight.visible = flashlightOn;
+  }
+});
+
 // Lumière d'ambiance nocturne (lune + rebond du sol) : sans assez de lumière
 // de base, une scène de nuit rendue en PBR (MeshStandardMaterial) tombe à
 // un noir quasi total dès qu'on s'éloigne des points lumineux — un vrai
@@ -105,313 +116,47 @@ function onResize() {
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
 
-// ---------- Réglages : sensibilité de visée + inversion de l'axe Y ----------
-const SETTINGS_KEY = 'plantshop-settings';
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return { sensitivity: parsed.sensitivity ?? 1, invertY: !!parsed.invertY };
-  } catch {
-    return { sensitivity: 1, invertY: false };
-  }
+createSettingsPanel({ controls });
+
+// ---------- Panneaux plein écran + outil tenu en main ----------
+// `isPlayingUnpaused` est utilisée par toolRuntime (clic pour nettoyer/jeter)
+// mais dépend des panneaux créés juste après : les variables sont déclarées
+// ici et assignées plus bas, la fermeture ne les lit qu'au moment du clic,
+// une fois tout initialisé.
+let registerPanel;
+let trashPanel;
+let closetPanel;
+
+function isPlayingUnpaused() {
+  return (
+    started &&
+    document.pointerLockElement === document.getElementById('app') &&
+    !registerPanel.isOpen &&
+    !trashPanel.isOpen &&
+    !closetPanel.isOpen &&
+    !dialogue.isOpen &&
+    !shift.ended
+  );
 }
-function saveSettings(s) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    // stockage indisponible (navigation privée...) : le réglage reste actif
-    // pour la session en cours, simplement pas mémorisé pour la prochaine.
-  }
-}
 
-const settingsBtn = document.getElementById('toggle-settings');
-const settingsPanel = document.getElementById('settings-panel');
-const settingsClose = document.getElementById('settings-close');
-const sensSlider = document.getElementById('sens-slider');
-const sensValue = document.getElementById('sens-value');
-const invertYBtn = document.getElementById('invert-y-toggle');
+const toolRuntime = createToolRuntime({ scene, camera, heldToolGroup, cleaning, audio, isPlayingUnpaused });
+closetPanel = createClosetPanel({ toolRuntime });
+registerPanel = createRegisterPanel({ stock, customers, shift, audio, decorState, shopFrames: shop.frames });
+trashPanel = createTrashPanel({ stock });
 
-const settings = loadSettings();
-controls.setSensitivity(settings.sensitivity);
-controls.setInvertY(settings.invertY);
-sensSlider.value = String(settings.sensitivity);
-sensValue.textContent = `${settings.sensitivity.toFixed(2)}×`;
-invertYBtn.textContent = settings.invertY ? 'OUI' : 'NON';
-invertYBtn.classList.toggle('active', settings.invertY);
+const shiftEndScreen = createShiftEndScreen({ stock, shift });
 
-settingsBtn.addEventListener('click', () => settingsPanel.classList.remove('hidden'));
-settingsClose.addEventListener('click', () => settingsPanel.classList.add('hidden'));
-
-sensSlider.addEventListener('input', () => {
-  const mult = parseFloat(sensSlider.value);
-  settings.sensitivity = mult;
-  sensValue.textContent = `${mult.toFixed(2)}×`;
-  controls.setSensitivity(mult);
-  saveSettings(settings);
-});
-
-invertYBtn.addEventListener('click', () => {
-  settings.invertY = !settings.invertY;
-  invertYBtn.textContent = settings.invertY ? 'OUI' : 'NON';
-  invertYBtn.classList.toggle('active', settings.invertY);
-  controls.setInvertY(settings.invertY);
-  saveSettings(settings);
-});
-
-// ---------- Caisse : commande du client en cours + stock ----------
-const registerPanel = document.getElementById('register-panel');
-const registerClose = document.getElementById('register-close');
-const registerMoneyEl = document.getElementById('register-money-value');
-const registerOrderEl = document.getElementById('register-order');
-const registerStockEl = document.getElementById('register-stock');
-const registerDecorEl = document.getElementById('register-decor');
-
-const trashPanel = document.getElementById('trash-panel');
-const trashClose = document.getElementById('trash-close');
-const trashListEl = document.getElementById('trash-list');
-
-const moneyEl = document.getElementById('money-value');
-const timeEl = document.getElementById('time-value');
+// ---------- Téléphone / PNJ : dialogues ----------
 const interactHint = document.getElementById('interact-hint');
 const interactLabel = document.getElementById('interact-label');
 const touchInteractBtn = document.getElementById('touch-interact');
 const npcTag = document.getElementById('npc-tag');
 const npcTagName = document.getElementById('npc-tag-name');
 const npcTagRequest = document.getElementById('npc-tag-request');
+const moneyEl = document.getElementById('money-value');
+const timeEl = document.getElementById('time-value');
 
-let registerOpen = false;
-let trashOpen = false;
-let target = null; // 'phone' | 'npc' | 'register' | 'trash' | null
-
-function renderRegisterPanel() {
-  registerMoneyEl.textContent = stock.stock.argent;
-
-  registerOrderEl.innerHTML = '';
-  const order = customers.current;
-  if (order) {
-    const row = document.createElement('div');
-    row.className = 'recipe-row';
-    row.innerHTML = `<span>${order.icon} ${order.label} — ${order.price} €</span>`;
-    const btn = document.createElement('button');
-    btn.className = 'recipe-craft-btn';
-    btn.type = 'button';
-    btn.textContent = 'Encaisser';
-    btn.disabled = !stock.has(order.id);
-    btn.addEventListener('click', () => {
-      if (customers.serve()) {
-        shift.recordSale();
-        audio.registerBeep();
-        renderRegisterPanel();
-      }
-    });
-    row.appendChild(btn);
-    registerOrderEl.appendChild(row);
-  } else {
-    const row = document.createElement('div');
-    row.className = 'recipe-row';
-    row.innerHTML = '<span>Aucun client pour le moment.</span>';
-    registerOrderEl.appendChild(row);
-  }
-
-  registerStockEl.innerHTML = ITEMS.map((item) => `<span>${item.icon} ${item.label} : ${stock.stock[item.id]}</span>`).join('');
-
-  registerDecorEl.innerHTML = '';
-  const decorRow = document.createElement('div');
-  decorRow.className = 'recipe-row';
-  decorRow.innerHTML = `<span>🖼️ Cadre magicien — ${FRAME_PRICE} € (${decorState.filled}/${FRAME_COUNT})</span>`;
-  const decorBtn = document.createElement('button');
-  decorBtn.className = 'recipe-craft-btn';
-  decorBtn.type = 'button';
-  decorBtn.textContent = 'Acheter';
-  decorBtn.disabled = !decorState.canBuy();
-  decorBtn.addEventListener('click', () => {
-    const index = decorState.buy();
-    if (index >= 0) {
-      shop.frames[index].material.dispose();
-      shop.frames[index].material = makeFrameMaterial(index % 3);
-      audio.registerBeep();
-      renderRegisterPanel();
-    }
-  });
-  decorRow.appendChild(decorBtn);
-  registerDecorEl.appendChild(decorRow);
-}
-
-function openRegisterPanel() {
-  registerOpen = true;
-  registerPanel.classList.remove('hidden');
-  interactHint.classList.add('hidden');
-  if (document.pointerLockElement) document.exitPointerLock();
-  renderRegisterPanel();
-}
-function closeRegisterPanel() {
-  registerOpen = false;
-  registerPanel.classList.add('hidden');
-}
-registerClose.addEventListener('click', closeRegisterPanel);
-
-function renderTrashPanel() {
-  trashListEl.innerHTML = '';
-  ITEMS.forEach((item) => {
-    const row = document.createElement('div');
-    row.className = 'recipe-row';
-    row.innerHTML = `<span>${item.icon} ${item.label} : ${stock.stock[item.id]}</span>`;
-    const btn = document.createElement('button');
-    btn.className = 'recipe-craft-btn';
-    btn.type = 'button';
-    btn.textContent = 'Jeter';
-    btn.disabled = !stock.has(item.id);
-    btn.addEventListener('click', () => {
-      if (stock.discard(item.id)) renderTrashPanel();
-    });
-    row.appendChild(btn);
-    trashListEl.appendChild(row);
-  });
-}
-
-function openTrashPanel() {
-  trashOpen = true;
-  trashPanel.classList.remove('hidden');
-  interactHint.classList.add('hidden');
-  if (document.pointerLockElement) document.exitPointerLock();
-  renderTrashPanel();
-}
-function closeTrashPanel() {
-  trashOpen = false;
-  trashPanel.classList.add('hidden');
-}
-trashClose.addEventListener('click', closeTrashPanel);
-
-// ---------- Placard de ménage : équiper/ranger balai ou débouche-chiotte ----------
-const closetPanel = document.getElementById('closet-panel');
-const closetClose = document.getElementById('closet-close');
-const closetCurrentEl = document.getElementById('closet-current');
-const closetListEl = document.getElementById('closet-list');
-
-let heldTool = null; // null | 'balai' | 'debouchoir'
-let closetOpen = false;
-
-function setHeldTool(toolId) {
-  heldTool = toolId;
-  attachHeldTool(heldToolGroup, heldTool);
-}
-
-function renderClosetPanel() {
-  closetCurrentEl.textContent = heldTool ? `En main : ${TOOL_LABELS[heldTool]}` : 'Rien en main.';
-  closetListEl.innerHTML = '';
-  Object.entries(TOOL_LABELS).forEach(([id, label]) => {
-    const row = document.createElement('div');
-    row.className = 'recipe-row';
-    row.innerHTML = `<span>${label}</span>`;
-    const btn = document.createElement('button');
-    btn.className = 'recipe-craft-btn';
-    btn.type = 'button';
-    btn.textContent = 'Prendre';
-    btn.disabled = heldTool === id;
-    btn.addEventListener('click', () => {
-      setHeldTool(id);
-      renderClosetPanel();
-    });
-    row.appendChild(btn);
-    closetListEl.appendChild(row);
-  });
-
-  const putAwayRow = document.createElement('div');
-  putAwayRow.className = 'recipe-row';
-  putAwayRow.innerHTML = '<span>Ranger l\'outil en main</span>';
-  const putAwayBtn = document.createElement('button');
-  putAwayBtn.className = 'recipe-craft-btn';
-  putAwayBtn.type = 'button';
-  putAwayBtn.textContent = 'Ranger';
-  putAwayBtn.disabled = !heldTool;
-  putAwayBtn.addEventListener('click', () => {
-    setHeldTool(null);
-    renderClosetPanel();
-  });
-  putAwayRow.appendChild(putAwayBtn);
-  closetListEl.appendChild(putAwayRow);
-}
-
-function openClosetPanel() {
-  closetOpen = true;
-  closetPanel.classList.remove('hidden');
-  interactHint.classList.add('hidden');
-  if (document.pointerLockElement) document.exitPointerLock();
-  renderClosetPanel();
-}
-function closeClosetPanel() {
-  closetOpen = false;
-  closetPanel.classList.add('hidden');
-}
-closetClose.addEventListener('click', closeClosetPanel);
-
-// ---------- Outil en main : nettoyage (clic gauche) + lancer (clic droit) ----------
-const raycaster = new THREE.Raycaster();
-const SCREEN_CENTER = new THREE.Vector2(0, 0);
-const TOOL_USE_RANGE = 3.2;
-const projectiles = [];
-let throwCharging = false;
-let throwChargeStart = 0;
-const MAX_CHARGE_MS = 1100;
-
-function aimedStain() {
-  if (!heldTool) return null;
-  raycaster.setFromCamera(SCREEN_CENTER, camera);
-  const hits = raycaster.intersectObjects(cleaning.activeMeshes(), false);
-  if (!hits.length || hits[0].distance > TOOL_USE_RANGE) return null;
-  return hits[0];
-}
-
-function useHeldTool() {
-  const hit = aimedStain();
-  if (!hit) return;
-  if (cleaning.clean(hit.object, heldTool)) audio.registerBeep();
-}
-
-function throwHeldTool(force) {
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  const projectile = createThrownProjectile(heldTool, camera.position, dir, force);
-  scene.add(projectile.mesh);
-  projectiles.push(projectile);
-  setHeldTool(null);
-}
-
-function isPlayingUnpaused() {
-  return (
-    started &&
-    document.pointerLockElement === document.getElementById('app') &&
-    !registerOpen &&
-    !trashOpen &&
-    !closetOpen &&
-    !dialogue.isOpen &&
-    !shift.ended
-  );
-}
-
-window.addEventListener('contextmenu', (e) => e.preventDefault());
-window.addEventListener('mousedown', (e) => {
-  if (!isPlayingUnpaused() || !heldTool) return;
-  if (e.button === 0) useHeldTool();
-  else if (e.button === 2) {
-    throwCharging = true;
-    throwChargeStart = performance.now();
-  }
-});
-window.addEventListener('mouseup', (e) => {
-  if (e.button !== 2 || !throwCharging) return;
-  throwCharging = false;
-  const heldMs = Math.min(performance.now() - throwChargeStart, MAX_CHARGE_MS);
-  throwHeldTool(heldMs / MAX_CHARGE_MS);
-});
-
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyF') {
-    flashlightOn = !flashlightOn;
-    flashlight.visible = flashlightOn;
-  }
-});
+let target = null; // 'phone' | 'npc' | 'register' | 'trash' | 'closet' | null
 
 // Appel téléphonique : reprend telle quelle la réplique d'ouverture de la
 // référence ("Salut, c'est Rosa."), suivie d'une commande à venir plus tard.
@@ -433,45 +178,28 @@ function handleInteractPress() {
     dialogue.advance();
     return;
   }
-  if (registerOpen) {
-    closeRegisterPanel();
+  if (registerPanel.isOpen) {
+    registerPanel.close();
     return;
   }
-  if (trashOpen) {
-    closeTrashPanel();
+  if (trashPanel.isOpen) {
+    trashPanel.close();
     return;
   }
-  if (closetOpen) {
-    closeClosetPanel();
+  if (closetPanel.isOpen) {
+    closetPanel.close();
     return;
   }
   if (target === 'phone') openPhoneCall();
   else if (target === 'npc') openNpcTalk();
-  else if (target === 'register') openRegisterPanel();
-  else if (target === 'trash') openTrashPanel();
-  else if (target === 'closet') openClosetPanel();
+  else if (target === 'register') registerPanel.open();
+  else if (target === 'trash') trashPanel.open();
+  else if (target === 'closet') closetPanel.open();
 }
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') handleInteractPress();
 });
 touchInteractBtn.addEventListener('click', handleInteractPress);
-
-// ---------- Fin de session ("l'après-midi") ----------
-const shiftEndEl = document.getElementById('shift-end');
-const shiftEndMoneyEl = document.getElementById('shift-end-money');
-const shiftEndServedEl = document.getElementById('shift-end-served');
-const shiftEndRestartBtn = document.getElementById('shift-end-restart');
-
-function showShiftEnd() {
-  shiftEndMoneyEl.textContent = stock.stock.argent;
-  shiftEndServedEl.textContent = shift.served;
-  shiftEndEl.classList.remove('hidden');
-  if (document.pointerLockElement) document.exitPointerLock();
-}
-// Recharger la page est le moyen le plus simple de repartir sur un état
-// propre (stock, argent, minuterie) sans avoir à dupliquer la logique
-// d'initialisation ailleurs.
-shiftEndRestartBtn.addEventListener('click', () => window.location.reload());
 
 let started = false;
 startBtn.addEventListener('click', () => {
@@ -506,7 +234,7 @@ function nearestTarget(p) {
   return null;
 }
 
-function updateNpcTag() {
+function updateNpcTag(menuOpen) {
   if (!customers.current) {
     npcTag.classList.add('hidden');
     return;
@@ -515,7 +243,7 @@ function updateNpcTag() {
   npcHeadWorldPos.set(shop.npc.position.x, 1.72, shop.npc.position.z);
   npcHeadScreenPos.copy(npcHeadWorldPos).project(camera);
   const onScreen = npcHeadScreenPos.z < 1 && Math.abs(npcHeadScreenPos.x) < 0.95 && Math.abs(npcHeadScreenPos.y) < 0.95;
-  if (!onScreen || dist > 8 || registerOpen || trashOpen || closetOpen || dialogue.isOpen) {
+  if (!onScreen || dist > 8 || menuOpen || dialogue.isOpen) {
     npcTag.classList.add('hidden');
     return;
   }
@@ -528,19 +256,6 @@ function updateNpcTag() {
   npcTag.classList.remove('hidden');
 }
 
-const toolHint = document.getElementById('tool-hint');
-const toolHintLabel = document.getElementById('tool-hint-label');
-
-function updateToolHint(paused) {
-  const hit = paused ? null : aimedStain();
-  if (!hit) {
-    toolHint.classList.add('hidden');
-    return;
-  }
-  toolHintLabel.textContent = heldTool === 'balai' ? 'Balayer' : 'Déboucher';
-  toolHint.classList.remove('hidden');
-}
-
 const clock = new THREE.Clock();
 let wasOutside = true;
 let shiftEndShown = false;
@@ -550,7 +265,7 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.1);
 
   if (started) {
-    const menuOpen = registerOpen || trashOpen || closetOpen || dialogue.isOpen;
+    const menuOpen = registerPanel.isOpen || trashPanel.isOpen || closetPanel.isOpen || dialogue.isOpen;
     const paused = menuOpen || shift.ended;
     if (!paused) controls.update(dt);
     if (controls.pollInteractPressed()) handleInteractPress();
@@ -561,13 +276,10 @@ function tick() {
     }
     if (shift.ended && !shiftEndShown) {
       shiftEndShown = true;
-      showShiftEnd();
+      shiftEndScreen.show();
     }
 
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-      const settled = updateProjectile(projectiles[i], dt);
-      if (settled) projectiles.splice(i, 1);
-    }
+    toolRuntime.updateProjectiles(dt);
 
     shop.npc.group.visible = !!customers.current;
 
@@ -590,8 +302,8 @@ function tick() {
     else if (target) interactLabel.textContent = INTERACT_LABELS[target];
     interactHint.classList.toggle('hidden', !target || menuOpen);
 
-    updateToolHint(paused);
-    updateNpcTag();
+    toolRuntime.updateToolHint(paused);
+    updateNpcTag(menuOpen);
   }
 
   renderer.render(scene, camera);

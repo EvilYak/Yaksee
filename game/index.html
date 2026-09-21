@@ -123,12 +123,18 @@
 
       <div id="boot-screen">
         <svg id="boot-logo" viewBox="0 0 120 90" aria-hidden="true">
-          <rect x="38" y="30" width="44" height="26" fill="#8fae4a" />
-          <rect x="30" y="54" width="60" height="9" fill="#8fae4a" />
-          <line x1="18" y1="30" x2="70" y2="12" stroke="#eef0d8" stroke-width="3" stroke-linecap="round" />
-          <circle cx="14" cy="28" r="3" fill="#eef0d8" />
-          <circle cx="24" cy="16" r="2" fill="#eef0d8" />
-          <circle cx="76" cy="8" r="2.4" fill="#eef0d8" />
+          <!-- Chapeau haut-de-forme : bord + calotte, silhouette noire classique de magicien. -->
+          <ellipse cx="52" cy="66" rx="34" ry="7" fill="#0a0a08" />
+          <rect x="30" y="20" width="44" height="42" rx="2" fill="#0a0a08" />
+          <rect x="30" y="52" width="44" height="7" fill="#d4af37" />
+          <!-- Baguette croisée par-dessus le chapeau, étoile dorée à la pointe. -->
+          <line x1="16" y1="34" x2="92" y2="10" stroke="#2a1810" stroke-width="4" stroke-linecap="round" />
+          <line x1="80" y1="14" x2="92" y2="10" stroke="#d4af37" stroke-width="4" stroke-linecap="round" />
+          <g fill="#d4af37">
+            <circle cx="100" cy="7" r="3" />
+            <circle cx="14" cy="40" r="2" />
+            <circle cx="88" cy="24" r="2.2" />
+          </g>
         </svg>
         <div id="boot-title">THE MAGIC SHOP</div>
         <div id="boot-subtitle">everything's an illusion.</div>

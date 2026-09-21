@@ -334,7 +334,7 @@ html, body {
 
 #sens-slider {
   flex: 1;
-  accent-color: #8fae4a;
+  accent-color: #d4af37;
 }
 
 #sens-value {
@@ -356,13 +356,13 @@ html, body {
   font-size: 12px;
   letter-spacing: 3px;
   color: #141210;
-  background: #8fae4a;
+  background: #d4af37;
   border: none;
   border-radius: 2px;
 }
 
 #settings-close:active {
-  background: #6f8f36;
+  background: #a8841f;
 }
 
 /* ---------- Panneaux (caisse / poubelle) ---------- */
@@ -420,7 +420,7 @@ html, body {
 #register-money {
   text-align: center;
   font-size: 15px;
-  color: #8fae4a;
+  color: #d4af37;
   margin-bottom: 14px;
 }
 
@@ -462,7 +462,7 @@ html, body {
   font-size: 12px;
   letter-spacing: 1px;
   color: #141210;
-  background: #8fae4a;
+  background: #d4af37;
   border: none;
   border-radius: 2px;
   padding: 7px 14px;
@@ -538,7 +538,7 @@ html, body {
   font-size: 12px;
   letter-spacing: 3px;
   color: #141210;
-  background: #8fae4a;
+  background: #d4af37;
   border: none;
   border-radius: 2px;
 }
@@ -586,13 +586,13 @@ html, body {
   font-size: 15px;
   letter-spacing: 3px;
   color: #141210;
-  background: #8fae4a;
+  background: #d4af37;
   border: none;
   border-radius: 2px;
 }
 
 #start-btn:active {
-  background: #6f8f36;
+  background: #a8841f;
 }
 
 #boot-screen.hidden {
