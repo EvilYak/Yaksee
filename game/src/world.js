@@ -580,7 +580,15 @@ export function buildWorld(maze) {
   }
 
   // ---------- Quartier pavillonnaire : maisons + réverbères ----------
-  const roofMat = makeRoofMaterial();
+  // Palette de teintes de toiture réalistes (bardeaux bruns, ardoise
+  // rouge-brun, anthracite, vert mousse éteint) : un matériau par maison,
+  // sinon les 6 toits sont un seul et même bloc marron uniforme partagé.
+  const roofPalette = [
+    { hue: 22, sat: 30 },
+    { hue: 8, sat: 22 },
+    { hue: 212, sat: 6 },
+    { hue: 96, sat: 14 },
+  ];
   const nbhd = rectWorldExtent(ZONES.neighborhood.rect, C);
   const margin = 1.6;
   const houseSpots = [
@@ -593,6 +601,8 @@ export function buildWorld(maze) {
   ];
   houseSpots.forEach(([hx, hz, ry]) => {
     const hue = Math.random() < 0.82 ? 95 + Math.random() * 45 : 195 + Math.random() * 20;
+    const roof = roofPalette[Math.floor(Math.random() * roofPalette.length)];
+    const roofMat = makeRoofMaterial(roof.hue, roof.sat);
     const house = buildHouse({ width: 4.4, wallHeight: 3.1, depth: 5.2, roofRise: 1.5, hue, roofMat });
     house.position.set(hx, 0, hz);
     house.rotation.y = ry;

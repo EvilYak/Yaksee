@@ -616,12 +616,36 @@ export function makeHouseMaterial(hue = 96) {
   return new THREE.MeshStandardMaterial({ map, roughness: 0.85 });
 }
 
-export function makeRoofMaterial() {
+// hue/sat pilotables : sans ça, toutes les maisons du quartier partagent le
+// même toit brun uniforme et se ressemblent toutes, alors que les façades
+// (makeHouseMaterial) varient déjà de teinte d'une maison à l'autre.
+export function makeRoofMaterial(hue = 26, sat = 24) {
   const size = 128;
   const canvas = makeCanvas(size);
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#3b3229';
+  ctx.fillStyle = `hsl(${hue}, ${sat}%, 19%)`;
   ctx.fillRect(0, 0, size, size);
+
+  // Rangées de bardeaux en quinconce (pas juste une teinte plate).
+  const rowH = size / 9;
+  ctx.strokeStyle = `hsla(${hue}, ${sat}%, 10%, 0.55)`;
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 9; i++) {
+    ctx.beginPath();
+    ctx.moveTo(0, i * rowH);
+    ctx.lineTo(size, i * rowH);
+    ctx.stroke();
+  }
+  for (let row = 0; row < 9; row++) {
+    const offset = row % 2 === 0 ? 0 : size / 12;
+    for (let x = offset; x < size; x += size / 6) {
+      ctx.beginPath();
+      ctx.moveTo(x, row * rowH);
+      ctx.lineTo(x, (row + 1) * rowH);
+      ctx.stroke();
+    }
+  }
+
   addNoise(ctx, size, 10);
   const map = toTexture(canvas, 2, 2);
   return new THREE.MeshStandardMaterial({ map, roughness: 0.9, side: THREE.DoubleSide });
