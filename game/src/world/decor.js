@@ -119,6 +119,78 @@ export function buildMirror(glassMat, frameMat) {
   return group;
 }
 
+// Poteau/pilier de soutien (colonne), du sol au plafond, avec base et
+// chapiteau légèrement plus larges que le fût — pour peupler les grandes
+// zones ouvertes (cour d'hôtel) qui sinon n'ont rien entre les murs.
+export function buildPillar(height, radius = 0.28) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xaea290, roughness: 0.8 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 12), mat);
+  shaft.position.y = height / 2;
+  group.add(shaft);
+
+  const capGeo = new THREE.CylinderGeometry(radius * 1.35, radius * 1.35, 0.12, 12);
+  const base = new THREE.Mesh(capGeo, mat);
+  base.position.y = 0.06;
+  group.add(base);
+
+  const cap = new THREE.Mesh(capGeo, mat);
+  cap.position.y = height - 0.06;
+  group.add(cap);
+
+  return group;
+}
+
+// Panneau stop classique : octogone rouge à liseré blanc sur un poteau
+// métallique, pour les intersections du quartier pavillonnaire.
+export function buildStopSign() {
+  const group = new THREE.Group();
+
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, roughness: 0.5, metalness: 0.5 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.1, 8), poleMat);
+  pole.position.y = 1.05;
+  group.add(pole);
+
+  function octagon(r) {
+    const shape = new THREE.Shape();
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI / 8 + (i * Math.PI) / 4;
+      const px = Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      if (i === 0) shape.moveTo(px, py);
+      else shape.lineTo(px, py);
+    }
+    shape.closePath();
+    return new THREE.ExtrudeGeometry(shape, { depth: 0.02, bevelEnabled: false });
+  }
+
+  const border = new THREE.Mesh(
+    octagon(0.33),
+    new THREE.MeshStandardMaterial({ color: 0xf2f2ec, roughness: 0.5 }),
+  );
+  border.position.y = 2.0;
+  group.add(border);
+
+  const face = new THREE.Mesh(
+    octagon(0.28),
+    new THREE.MeshStandardMaterial({ color: 0xc22222, roughness: 0.5 }),
+  );
+  face.position.set(0, 2.0, 0.005);
+  group.add(face);
+
+  return group;
+}
+
+// Caisse en bois pour peupler les couloirs — un peu de désordre/entreposage
+// au lieu de couloirs parfaitement vides.
+export function buildCrate(size = 0.6) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x8a6a3c, roughness: 0.85 });
+  const height = size * 0.9;
+  const box = new THREE.Mesh(new THREE.BoxGeometry(size, height, size), mat);
+  box.position.y = height / 2;
+  return box;
+}
+
 export function buildStreetlight() {
   const group = new THREE.Group();
   const pole = new THREE.Mesh(

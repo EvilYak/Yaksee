@@ -3,7 +3,7 @@ import { makeLightStripMaterial, makeHouseMaterial, makeRoofMaterial, makeMirror
 import { ZONES, DEFAULT_THEME, DEFAULT_WALL_HEIGHT } from './zones.js';
 import { addChunkedInstances } from './world/chunking.js';
 import { rectWorldExtent, buildFloorWithHoles, collectCellEdges, buildEdgeGridMesh } from './world/geometry.js';
-import { buildHouse, buildMirror, buildStreetlight } from './world/decor.js';
+import { buildHouse, buildMirror, buildStreetlight, buildPillar, buildStopSign, buildCrate } from './world/decor.js';
 import { buildThemeConfig } from './world/theme-config.js';
 
 export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
@@ -152,6 +152,21 @@ export function buildWorld(maze) {
     addChunkedInstances(group, bucket2.h, baseboardHGeo, mat, baseboardPlace, C);
   }
 
+  // ---------- Caisses éparpillées dans les couloirs backrooms ----------
+  // Un peu de désordre entreposé au sol, pas des couloirs parfaitement vides.
+  for (let x = 0; x < size; x++) {
+    for (let y = 0; y < size; y++) {
+      if (maze.themeAt(x, y) !== 'backrooms') continue;
+      if (Math.random() > 0.05) continue;
+      const angle = Math.random() * Math.PI * 2;
+      const offset = 0.75 + Math.random() * 0.25;
+      const crate = buildCrate(0.45 + Math.random() * 0.3);
+      crate.position.set(x * C + Math.cos(angle) * offset, 0, y * C + Math.sin(angle) * offset);
+      crate.rotation.y = Math.random() * Math.PI * 2;
+      group.add(crate);
+    }
+  }
+
   // ---------- Néons plafonniers (uniquement zones "lights: true") ----------
   // Un vrai panneau fluorescent encastré (large, presque carré), pas une fine
   // barrette : c'est ce qui se reconnaît immédiatement au plafond, pas juste
@@ -275,8 +290,32 @@ export function buildWorld(maze) {
     group.add(curb);
   });
 
-  // ---------- Hôtel : jardinières décoratives ----------
+  // Panneaux stop de part et d'autre de l'allée, un peu avant et après le
+  // croisement central — un vrai petit quartier a une signalisation, pas
+  // juste des maisons posées dans l'herbe.
+  [
+    [nbhd.cx - pathHalfWidth - 0.5, nbhd.cz - nbhd.h * 0.12],
+    [nbhd.cx + pathHalfWidth + 0.5, nbhd.cz + nbhd.h * 0.12],
+  ].forEach(([sx, sz]) => {
+    const sign = buildStopSign();
+    sign.position.set(sx, 0, sz);
+    group.add(sign);
+  });
+
+  // ---------- Hôtel : colonnade + jardinières décoratives ----------
+  // Une cour de 45m de côté avec seulement des jardinières aux coins se lit
+  // comme une salle vide — une vraie cour d'hôtel a des piliers de soutien.
+  const pillarInset = 0.72;
+  const pillarSpots = [-pillarInset, -pillarInset * 0.34, pillarInset * 0.34, pillarInset].flatMap((fx) =>
+    [-pillarInset, -pillarInset * 0.34, pillarInset * 0.34, pillarInset].map((fz) => [fx, fz]),
+  );
   const htl = rectWorldExtent(ZONES.hotel.rect, C);
+  pillarSpots.forEach(([fx, fz]) => {
+    const pillar = buildPillar(themes.hotel.wallHeight - 0.05);
+    pillar.position.set(htl.cx + fx * (htl.w / 2), 0, htl.cz + fz * (htl.h / 2));
+    group.add(pillar);
+  });
+
   const planterMat = makeHouseMaterial(120);
   [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
     const planter = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 1.1), planterMat);
