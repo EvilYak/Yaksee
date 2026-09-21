@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0a08" />
+    <meta name="theme-color" content="#141210" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-    <title>NO CLIP // backrooms</title>
+    <title>THE PLANT SHOP</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
@@ -17,18 +17,19 @@
     <div id="app">
       <canvas id="scene"></canvas>
 
+      <div id="crosshair"></div>
+
       <div id="hud">
-        <div id="rec">
-          <span id="rec-dot"></span>
-          <span>REC</span>
+        <div id="objective">
+          <span id="objective-icon">○</span>
+          <span id="objective-text">Préparez-vous pour les clients</span>
         </div>
-        <div id="timestamp">00:00:00:00</div>
-        <div id="battery">🔋 87%</div>
-        <div id="toggles">
-          <button id="toggle-vhs" class="toggle-btn active" type="button">VHS</button>
-          <button id="toggle-lamp" class="toggle-btn active" type="button">💡</button>
-          <button id="toggle-settings" class="toggle-btn" type="button">⚙</button>
-        </div>
+        <button id="toggle-settings" class="toggle-btn" type="button">⚙</button>
+      </div>
+
+      <div id="interact-hint" class="hidden">
+        <span class="key-badge">E</span>
+        <span>Comptoir</span>
       </div>
 
       <div id="settings-panel" class="hidden">
@@ -52,18 +53,19 @@
         </div>
       </div>
 
-      <div id="boot-screen">
-        <div id="boot-title">NO CLIP</div>
-        <button id="start-btn">ENTRER</button>
+      <div id="craft-panel" class="hidden">
+        <div id="craft-card">
+          <div id="craft-title">COMPTOIR</div>
+          <div id="craft-stock"></div>
+          <div id="craft-recipes"></div>
+          <button id="craft-close" type="button">FERMER</button>
+        </div>
       </div>
 
-      <div id="dialogue-box" class="hidden">
-        <div id="dialogue-name">
-          <span id="dialogue-icon">💬</span>
-          <span id="dialogue-name-text">Client</span>
-        </div>
-        <div id="dialogue-text"></div>
-        <div id="dialogue-next">▼</div>
+      <div id="boot-screen">
+        <div id="boot-title">THE PLANT SHOP</div>
+        <div id="boot-subtitle">plants are life.</div>
+        <button id="start-btn">ENTRER</button>
       </div>
 
       <div id="touch-ui">
@@ -73,6 +75,7 @@
           </div>
         </div>
         <div id="look-zone"></div>
+        <button id="touch-interact" class="hidden" type="button">E</button>
       </div>
     </div>
 

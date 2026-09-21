@@ -1,13 +1,9 @@
 import * as THREE from 'three';
-import { generateMaze } from './maze.js';
-import { buildWorld } from './world.js';
-import { GRID_SIZE, CELL_SIZE } from './zones.js';
+import { buildShopWorld } from './world/shop.js';
 import { createControls } from './controls.js';
 import { createAudio } from './audio.js';
-import { createPostFX } from './postfx.js';
 import { createHud } from './hud.js';
-import { buildViewArms } from './world/character.js';
-import { createDialogue } from './dialogue.js';
+import { createInventory, RECIPES, RESOURCE_LABELS } from './crafting.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -18,49 +14,51 @@ if ('serviceWorker' in navigator) {
 const canvas = document.getElementById('scene');
 const bootScreen = document.getElementById('boot-screen');
 const startBtn = document.getElementById('start-btn');
-const vhsBtn = document.getElementById('toggle-vhs');
-const lampBtn = document.getElementById('toggle-lamp');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = false;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 60);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 80);
 
-const maze = generateMaze(GRID_SIZE, CELL_SIZE, Date.now() & 0xffffffff);
-const world = buildWorld(maze);
-scene.add(world.group);
-scene.fog = world.fog;
-scene.background = new THREE.Color(0x59532f);
+const NIGHT_SKY = 0x0b1220;
+scene.background = new THREE.Color(NIGHT_SKY);
+scene.fog = new THREE.Fog(NIGHT_SKY, 16, 42);
 
-// Avant-bras/mains bas-poly attachés à la caméra (voir character.js) : la
-// caméra doit être dans le graphe de scène pour que ses enfants soient
-// rendus, d'où le scene.add(camera) — le personnage du joueur "porte" la
-// caméra plutôt que l'inverse.
-scene.add(camera);
-const viewArms = buildViewArms();
-camera.add(viewArms);
+const shop = buildShopWorld();
+scene.add(shop.group);
+
+// Lumière d'ambiance nocturne (lune + rebond du sol) : sans assez de lumière
+// de base, une scène de nuit rendue en PBR (MeshStandardMaterial) tombe à
+// un noir quasi total dès qu'on s'éloigne des points lumineux — un vrai
+// parking de nuit reste éclairé par le ciel + l'enseigne + les lampadaires.
+scene.add(new THREE.HemisphereLight(0x5a72a8, 0x2a2418, 1.4));
+const moon = new THREE.DirectionalLight(0x9fb0d8, 0.7);
+moon.position.set(-6, 14, -6);
+scene.add(moon);
 
 const audio = createAudio();
-const dialogue = createDialogue();
-const INTERACT_OPEN_RADIUS = 2.2;
-const INTERACT_CLOSE_RADIUS = 2.8;
+const hud = createHud();
+const inventory = createInventory();
+
+const bounds = { minX: -11, maxX: 11, minZ: -16.5, maxZ: 4 };
 
 const controls = createControls({
   camera,
-  maze,
-  cellSize: world.cellSize,
-  startPos: world.startWorldPos,
-  initialYaw: maze.startYaw(),
-  onStep: (theme, sprinting) => audio.footstep(theme, sprinting),
+  colliders: shop.colliders,
+  bounds,
+  startPos: shop.startWorldPos,
+  initialYaw: shop.startYaw,
+  onStep: (pos, sprinting) => {
+    const surface = pos.z < -3.6 ? 'asphalt' : 'tile';
+    audio.footstep(surface, sprinting);
+  },
 });
-
-const postfx = createPostFX(renderer, scene, camera);
-const hud = createHud();
 
 function onResize() {
   const w = window.innerWidth;
@@ -68,27 +66,12 @@ function onResize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
-  postfx.setSize(w, h);
 }
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
 
-let vhsOn = true;
-vhsBtn.addEventListener('click', () => {
-  vhsOn = !vhsOn;
-  postfx.setEnabled(vhsOn);
-  vhsBtn.classList.toggle('active', vhsOn);
-});
-
-let lampOn = true;
-lampBtn.addEventListener('click', () => {
-  lampOn = !lampOn;
-  world.setLampEnabled(lampOn);
-  lampBtn.classList.toggle('active', lampOn);
-});
-
 // ---------- Réglages : sensibilité de visée + inversion de l'axe Y ----------
-const SETTINGS_KEY = 'noclip-settings';
+const SETTINGS_KEY = 'plantshop-settings';
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -141,6 +124,67 @@ invertYBtn.addEventListener('click', () => {
   saveSettings(settings);
 });
 
+// ---------- Comptoir : fabrication/échange de ressources ----------
+const craftPanel = document.getElementById('craft-panel');
+const craftClose = document.getElementById('craft-close');
+const craftStockEl = document.getElementById('craft-stock');
+const craftRecipesEl = document.getElementById('craft-recipes');
+const interactHint = document.getElementById('interact-hint');
+const touchInteractBtn = document.getElementById('touch-interact');
+
+let craftOpen = false;
+let inRange = false;
+
+function renderCraftPanel() {
+  craftStockEl.innerHTML = Object.entries(inventory.stock)
+    .map(([id, qty]) => `<span>${RESOURCE_LABELS[id] || id} : ${qty}</span>`)
+    .join('');
+
+  craftRecipesEl.innerHTML = '';
+  RECIPES.forEach((recipe) => {
+    const row = document.createElement('div');
+    row.className = 'recipe-row';
+    const canCraft = inventory.canCraft(recipe);
+    row.innerHTML = `<span>${recipe.label}</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'recipe-craft-btn';
+    btn.type = 'button';
+    btn.textContent = 'Fabriquer';
+    btn.disabled = !canCraft;
+    btn.addEventListener('click', () => {
+      if (inventory.craft(recipe.id)) {
+        audio.registerBeep();
+        renderCraftPanel();
+      }
+    });
+    row.appendChild(btn);
+    craftRecipesEl.appendChild(row);
+  });
+}
+
+function openCraftPanel() {
+  craftOpen = true;
+  craftPanel.classList.remove('hidden');
+  interactHint.classList.add('hidden');
+  if (document.pointerLockElement) document.exitPointerLock();
+  renderCraftPanel();
+}
+function closeCraftPanel() {
+  craftOpen = false;
+  craftPanel.classList.add('hidden');
+}
+craftClose.addEventListener('click', closeCraftPanel);
+
+function tryToggleCraft() {
+  if (!inRange && !craftOpen) return;
+  if (craftOpen) closeCraftPanel();
+  else openCraftPanel();
+}
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyE') tryToggleCraft();
+});
+touchInteractBtn.addEventListener('click', tryToggleCraft);
+
 let started = false;
 startBtn.addEventListener('click', () => {
   if (started) return;
@@ -155,37 +199,28 @@ startBtn.addEventListener('click', () => {
 });
 
 const clock = new THREE.Clock();
-let nextCrackle = 4 + Math.random() * 10;
+let wasOutside = true;
 
 function tick() {
   requestAnimationFrame(tick);
   const dt = Math.min(clock.getDelta(), 0.1);
-  const t = clock.elapsedTime;
 
   if (started) {
-    controls.update(dt);
-    world.update(dt, camera.position, camera);
-    hud.update(dt);
-    postfx.update(t);
+    if (!craftOpen) controls.update(dt);
 
-    // PNJ à proximité : ouvre/ferme le dialogue avec hystérésis (deux seuils
-    // de distance différents) pour ne pas clignoter en restant à la limite.
-    world.npcs.forEach((npc) => {
-      const dx = npc.position.x - camera.position.x;
-      const dz = npc.position.z - camera.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < INTERACT_OPEN_RADIUS) dialogue.open(npc);
-      else if (dist > INTERACT_CLOSE_RADIUS && dialogue.isOpenFor(npc)) dialogue.close();
-    });
+    const p = controls.position;
+    const isOutside = p.z < -3.6;
+    if (wasOutside && !isOutside) audio.doorChime();
+    wasOutside = isOutside;
 
-    nextCrackle -= dt;
-    if (nextCrackle <= 0) {
-      audio.crackle();
-      nextCrackle = 5 + Math.random() * 14;
-    }
+    const dx = p.x - shop.craftPoint.x;
+    const dz = p.z - shop.craftPoint.z;
+    inRange = Math.hypot(dx, dz) < shop.craftPoint.radius;
+    touchInteractBtn.classList.toggle('hidden', !inRange);
+    if (!craftOpen) interactHint.classList.toggle('hidden', !inRange);
   }
 
-  postfx.composer.render();
+  renderer.render(scene, camera);
 }
 
 tick();

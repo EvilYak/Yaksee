@@ -1,12 +1,12 @@
 {
-  "name": "NO CLIP — Backrooms",
-  "short_name": "NO CLIP",
-  "description": "Exploration liminale réaliste, sans monstre, ambiance found-footage.",
+  "name": "The Plant Shop",
+  "short_name": "Plant Shop",
+  "description": "Gérez votre petite boutique de plantes : cultivez, fabriquez, vendez.",
   "start_url": "./index.html",
   "display": "fullscreen",
-  "orientation": "portrait-primary",
-  "background_color": "#050503",
-  "theme_color": "#0a0a08",
+  "orientation": "landscape-primary",
+  "background_color": "#141210",
+  "theme_color": "#141210",
   "icons": [
     { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]

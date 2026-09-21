@@ -1,5 +1,6 @@
 // Toute l'ambiance sonore est synthétisée via Web Audio API (aucun fichier audio
-// à charger) : bourdonnement de néons, souffle de ventilation, pas sur moquette.
+// à charger) : léger bourdonnement de frigo/néon, pas sur carrelage ou asphalte,
+// carillon de porte, bip de caisse.
 
 export function createAudio() {
   let ctx = null;
@@ -27,137 +28,77 @@ export function createAudio() {
     if (ctx.state === 'suspended') ctx.resume();
     started = true;
 
-    // Bourdonnement électrique grave (néons + ventilation lointaine).
+    // Bourdonnement discret de frigo/néon d'arrière-boutique, très en retrait.
     const drone = ctx.createOscillator();
     drone.type = 'sine';
-    drone.frequency.value = 68;
-    const drone2 = ctx.createOscillator();
-    drone2.type = 'triangle';
-    drone2.frequency.value = 41;
+    drone.frequency.value = 92;
     const droneGain = ctx.createGain();
-    droneGain.gain.value = 0.09;
+    droneGain.gain.value = 0.025;
     const droneFilter = ctx.createBiquadFilter();
     droneFilter.type = 'lowpass';
-    droneFilter.frequency.value = 220;
+    droneFilter.frequency.value = 260;
     drone.connect(droneFilter);
-    drone2.connect(droneFilter);
     droneFilter.connect(droneGain);
     droneGain.connect(master);
     drone.start();
-    drone2.start();
-
-    // Bourdonnement 100/120Hz caractéristique des tubes fluorescents.
-    const buzz = ctx.createOscillator();
-    buzz.type = 'square';
-    buzz.frequency.value = 120;
-    const buzzGain = ctx.createGain();
-    buzzGain.gain.value = 0.012;
-    buzz.connect(buzzGain);
-    buzzGain.connect(master);
-    buzz.start();
-
-    // Souffle d'air continu (bruit filtré).
-    const hiss = ctx.createBufferSource();
-    hiss.buffer = noiseBuffer(2, ctx);
-    hiss.loop = true;
-    const hissFilter = ctx.createBiquadFilter();
-    hissFilter.type = 'bandpass';
-    hissFilter.frequency.value = 900;
-    hissFilter.Q.value = 0.4;
-    const hissGain = ctx.createGain();
-    hissGain.gain.value = 0.02;
-    hiss.connect(hissFilter);
-    hissFilter.connect(hissGain);
-    hissGain.connect(master);
-    hiss.start();
-
-    // Légère variation lente pour que le drone respire (pas parfaitement statique).
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.07;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.03;
-    lfo.connect(lfoGain);
-    lfoGain.connect(droneGain.gain);
-    lfo.start();
   }
 
-  function footstep(theme, sprinting) {
+  function footstep(surface, sprinting) {
     if (!started || !ctx) return;
-    if (theme === 'pool') {
-      splash(sprinting);
-      return;
-    }
     const t = ctx.currentTime;
     const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(0.18, ctx);
+    src.buffer = noiseBuffer(0.14, ctx);
     const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 320 + Math.random() * 140;
+    filter.type = surface === 'tile' ? 'highpass' : 'lowpass';
+    filter.frequency.value = surface === 'tile' ? 700 + Math.random() * 300 : 250 + Math.random() * 120;
     const gain = ctx.createGain();
-    const peak = (sprinting ? 0.34 : 0.25) + Math.random() * 0.08;
+    const peak = (sprinting ? 0.3 : 0.2) + Math.random() * 0.06;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(peak, t + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    gain.gain.linearRampToValueAtTime(peak, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
     src.connect(filter);
     filter.connect(gain);
     gain.connect(master);
     src.start(t);
-    src.stop(t + 0.2);
+    src.stop(t + 0.15);
   }
 
-  // Pas dans l'eau des pool rooms : un "plouf" grave + des éclaboussures aiguës.
-  function splash(sprinting) {
-    const t = ctx.currentTime;
-    const thud = ctx.createBufferSource();
-    thud.buffer = noiseBuffer(0.12, ctx);
-    const thudFilter = ctx.createBiquadFilter();
-    thudFilter.type = 'lowpass';
-    thudFilter.frequency.value = 220;
-    const thudGain = ctx.createGain();
-    const thudPeak = (sprinting ? 0.3 : 0.22) + Math.random() * 0.05;
-    thudGain.gain.setValueAtTime(0.0001, t);
-    thudGain.gain.linearRampToValueAtTime(thudPeak, t + 0.01);
-    thudGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-    thud.connect(thudFilter);
-    thudFilter.connect(thudGain);
-    thudGain.connect(master);
-    thud.start(t);
-    thud.stop(t + 0.16);
-
-    const spray = ctx.createBufferSource();
-    spray.buffer = noiseBuffer(0.2, ctx);
-    const sprayFilter = ctx.createBiquadFilter();
-    sprayFilter.type = 'highpass';
-    sprayFilter.frequency.value = 2200 + Math.random() * 800;
-    const sprayGain = ctx.createGain();
-    const sprayPeak = (sprinting ? 0.17 : 0.12) + Math.random() * 0.05;
-    sprayGain.gain.setValueAtTime(0.0001, t);
-    sprayGain.gain.linearRampToValueAtTime(sprayPeak, t + 0.008);
-    sprayGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    spray.connect(sprayFilter);
-    sprayFilter.connect(sprayGain);
-    sprayGain.connect(master);
-    spray.start(t);
-    spray.stop(t + 0.24);
-  }
-
-  // Craquement/grésillement bref, déclenché aléatoirement pour l'ambiance found-footage.
-  function crackle() {
+  // Petit carillon de porte deux notes (cloche de magasin classique).
+  function doorChime() {
     if (!started || !ctx) return;
     const t = ctx.currentTime;
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(0.06, ctx);
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.value = 2500;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.06, t);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    src.connect(filter);
-    filter.connect(gain);
-    gain.connect(master);
-    src.start(t);
+    [880, 1174.7].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      const start = t + i * 0.11;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.18, start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.5);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(start);
+      osc.stop(start + 0.55);
+    });
   }
 
-  return { start, footstep, crackle };
+  // Bip de confirmation (caisse / fabrication réussie).
+  function registerBeep() {
+    if (!started || !ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 1200;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(0.12, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(t);
+    osc.stop(t + 0.12);
+  }
+
+  return { start, footstep, doorChime, registerBeep };
 }

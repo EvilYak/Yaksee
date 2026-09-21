@@ -1,5 +1,41 @@
 import * as THREE from 'three';
 
+// Panneau texte générique (enseignes, portes, plaques) : un canvas non
+// répété, une texture par appel, pas de bruit ajouté dessus.
+export function makeLabelTexture({
+  width = 512,
+  height = 256,
+  bg = '#141210',
+  fg = '#e8e0c0',
+  lines = [''],
+  fontSize = 42,
+  fontWeight = '700',
+  letterSpacing = 4,
+  align = 'center',
+} = {}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = fg;
+  ctx.font = `${fontWeight} ${fontSize}px "Courier New", monospace`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  const lineHeight = fontSize * 1.3;
+  const totalH = lineHeight * lines.length;
+  const x = align === 'center' ? width / 2 : align === 'right' ? width - 24 : 24;
+  lines.forEach((line, i) => {
+    const y = height / 2 - totalH / 2 + lineHeight * (i + 0.5);
+    if (letterSpacing > 0 && ctx.letterSpacing !== undefined) ctx.letterSpacing = `${letterSpacing}px`;
+    ctx.fillText(line, x, y);
+  });
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export function toTexture(canvas, repeatX = 1, repeatY = 1) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -9,42 +45,3 @@ export function toTexture(canvas, repeatX = 1, repeatY = 1) {
   return tex;
 }
 
-// Bump map généré à partir du canvas niveaux de gris (relief léger sans vraie normal map).
-export function toBumpTexture(canvas, repeatX, repeatY) {
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeatX, repeatY);
-  return tex;
-}
-
-// Un même matériau instancié (InstancedMesh) affiche par défaut EXACTEMENT
-// la même image sur chaque pan de mur — c'est ce qui se voit comme des
-// "carrés qui se répètent". Comme three.js n'a pas de canal UV2/UV3 par
-// instance, on triche au niveau du shader : chaque instance reçoit un
-// décalage UV et un éventuel flip (attributs instanciés posés dans
-// world/walls.js), appliqués après le mapping UV standard. La texture reste
-// bouclée (RepeatWrapping) donc le décalage fait juste glisser la fenêtre
-// d'échantillonnage dans le même bruit périodique — un pan de mur voisin
-// montre une portion différente du même motif au lieu d'un copier-coller.
-export function enableUvVariation(material, { flip = true } = {}) {
-  material.userData.uvVariation = true;
-  material.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nattribute vec2 instanceUvOffset;\nattribute float instanceUvFlip;\n',
-      )
-      .replace(
-        '#include <uv_vertex>',
-        `#include <uv_vertex>
-#ifdef USE_MAP
-  vMapUv = ${flip ? '(instanceUvFlip > 0.5 ? vMapUv.yx : vMapUv)' : 'vMapUv'} + instanceUvOffset;
-#endif
-#ifdef USE_BUMPMAP
-  vBumpMapUv = ${flip ? '(instanceUvFlip > 0.5 ? vBumpMapUv.yx : vBumpMapUv)' : 'vBumpMapUv'} + instanceUvOffset;
-#endif
-`,
-      );
-  };
-  return material;
-}

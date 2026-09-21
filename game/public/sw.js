@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noclip-v1';
+const CACHE_NAME = 'plantshop-v1';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

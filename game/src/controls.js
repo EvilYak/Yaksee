@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 
 const EYE_HEIGHT = 1.65;
-const PLAYER_RADIUS = 0.3;
-const WALK_SPEED = 2.1; // m/s, rythme de marche réaliste
-const RUN_SPEED = 4.0; // m/s, sprint
+const PLAYER_RADIUS = 0.35;
+const WALK_SPEED = 2.3;
+const RUN_SPEED = 4.2;
 
-// Manette : mapping "standard" (Gamepad API) — stick gauche = déplacement,
-// stick droit = regard, bouton A/Cross (index 0) = sprint.
 const GAMEPAD_DEADZONE = 0.16;
 const GAMEPAD_LOOK_SPEED = 2.6;
 const GAMEPAD_SPRINT_BUTTON = 0;
@@ -16,7 +14,7 @@ function applyDeadzone(v, dz = GAMEPAD_DEADZONE) {
   return (v - Math.sign(v) * dz) / (1 - dz);
 }
 
-export function createControls({ camera, maze, cellSize, startPos, initialYaw, onStep }) {
+export function createControls({ camera, colliders, bounds, startPos, initialYaw, onStep }) {
   const joystickZone = document.getElementById('joystick-zone');
   const joystickBase = document.getElementById('joystick-base');
   const joystickNub = document.getElementById('joystick-nub');
@@ -24,14 +22,11 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   const app = document.getElementById('app');
 
   const position = startPos.clone();
-  let yaw = initialYaw ?? Math.random() * Math.PI * 2;
+  let yaw = initialYaw ?? 0;
   let pitch = 0;
   let bobPhase = 0;
   let bobLast = 0;
 
-  // Réglages regard : multiplicateur de sensibilité + inversion de l'axe Y,
-  // partagés par tous les modes de visée (souris, tactile, manette) au lieu
-  // de n'en couvrir qu'un seul.
   let sensitivity = 1;
   let invertY = 1;
   function setSensitivity(mult) {
@@ -46,14 +41,14 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     pitch = Math.max(-1.3, Math.min(1.3, pitch));
   }
 
-  const moveVec = { x: 0, y: 0 }; // x = strafe, y = avant/arrière, -1..1
-  let joyMagnitude = 0; // 0..1, à quel point le joystick est poussé
+  const moveVec = { x: 0, y: 0 };
+  let joyMagnitude = 0;
   const keys = new Set();
 
   // ---------- Joystick tactile ----------
   let joyPointerId = null;
   const joyRadius = 46;
-  const JOY_RUN_THRESHOLD = 0.92; // pousser à fond le joystick = courir
+  const JOY_RUN_THRESHOLD = 0.92;
 
   function joyReset() {
     joystickNub.style.transform = 'translate(0,0)';
@@ -125,9 +120,6 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   lookZone.addEventListener('pointercancel', endLook);
 
   // ---------- Souris + clavier (bureau) ----------
-  // Pointer Lock : un clic verrouille le curseur et la souris tourne la caméra
-  // librement (standard FPS PC), sans avoir à maintenir le bouton enfoncé.
-  // Repli sur le glisser-déposer si le navigateur refuse/n'a pas l'API.
   const MOUSE_SENS = 0.0026;
   const DRAG_SENS = 0.0026;
   let mouseDown = false;
@@ -140,9 +132,6 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   function requestLock() {
     if (!pointerLockSupported || !isDesktop()) return;
     if (document.pointerLockElement === app) return;
-    // Certains navigateurs renvoient une Promise qui peut être rejetée (geste
-    // utilisateur jugé insuffisant, contexte sandboxé...) ; sans .catch ici,
-    // ça remonte comme une exception non gérée au lieu d'échouer en silence.
     const result = app.requestPointerLock();
     if (result && typeof result.catch === 'function') result.catch(() => {});
   }
@@ -150,8 +139,6 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   app.addEventListener('click', requestLock);
 
   document.addEventListener('pointerlockerror', () => {
-    // L'API a été refusée (p.ex. iframe sandbox) : on bascule sur le
-    // repli glisser-déposer ci-dessous.
     pointerLockSupported = false;
   });
 
@@ -202,31 +189,36 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     return { x, y, lookX, lookY, sprint };
   }
 
-  // ---------- Collision grille ----------
-  function resolveAxis(current, delta, axis, otherCoord) {
-    if (delta === 0) return current;
-    let next = current + delta;
-    const C = cellSize;
-    const cellFrom = Math.floor((current + C / 2) / C);
-    const cellTo = Math.floor((next + C / 2) / C);
-    if (cellTo === cellFrom) return next;
-
-    const otherCell = Math.floor((otherCoord + C / 2) / C);
-    let blocked = false;
-    if (axis === 'x') {
-      blocked = cellTo > cellFrom
-        ? maze.hasWallE(cellFrom, otherCell)
-        : maze.hasWallW(cellFrom, otherCell);
-    } else {
-      blocked = cellTo > cellFrom
-        ? maze.hasWallS(otherCell, cellFrom)
-        : maze.hasWallN(otherCell, cellFrom);
+  // ---------- Collision : boîtes alignées aux axes (mur, comptoir, voiture...) ----------
+  // Plus de grille de labyrinthe ici : chaque obstacle de la boutique/parking
+  // est une AABB dans `colliders`. On résout un axe à la fois (X puis Z) pour
+  // pouvoir glisser le long d'un mur au lieu de se bloquer en diagonale.
+  function collides(x, z) {
+    for (const c of colliders) {
+      if (
+        x + PLAYER_RADIUS > c.minX &&
+        x - PLAYER_RADIUS < c.maxX &&
+        z + PLAYER_RADIUS > c.minZ &&
+        z - PLAYER_RADIUS < c.maxZ
+      ) {
+        return true;
+      }
     }
-    if (!blocked) return next;
-    const boundary = cellTo > cellFrom
-      ? cellFrom * C + C / 2 - PLAYER_RADIUS
-      : cellFrom * C - C / 2 + PLAYER_RADIUS;
-    return boundary;
+    return false;
+  }
+
+  function resolveAxis(x, z, dx, dz) {
+    let nx = x;
+    let nz = z;
+    if (dx !== 0) {
+      const tryX = x + dx;
+      if (!collides(tryX, z)) nx = tryX;
+    }
+    if (dz !== 0) {
+      const tryZ = z + dz;
+      if (!collides(nx, tryZ)) nz = tryZ;
+    }
+    return { x: nx, z: nz };
   }
 
   function update(dt) {
@@ -246,7 +238,6 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
 
     const sinY = Math.sin(yaw);
     const cosY = Math.cos(yaw);
-    // Avant de la caméra = -Z en repère three.js par défaut avec cette convention de yaw.
     const forwardX = -sinY;
     const forwardZ = -cosY;
     const rightX = cosY;
@@ -255,8 +246,9 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     const dx = (forwardX * inY + rightX * inX) * moveSpeed * dt;
     const dz = (forwardZ * inY + rightZ * inX) * moveSpeed * dt;
 
-    position.x = resolveAxis(position.x, dx, 'x', position.z);
-    position.z = resolveAxis(position.z, dz, 'z', position.x);
+    const resolved = resolveAxis(position.x, position.z, dx, dz);
+    position.x = THREE.MathUtils.clamp(resolved.x, bounds.minX, bounds.maxX);
+    position.z = THREE.MathUtils.clamp(resolved.z, bounds.minZ, bounds.maxZ);
 
     let bobY = 0;
     let bobX = 0;
@@ -267,11 +259,7 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
       bobY = Math.abs(Math.sin(bobPhase)) * bobAmp;
       bobX = Math.sin(bobPhase * 0.5) * 0.02;
       const s = Math.sin(bobPhase);
-      if (bobLast <= 0 && s > 0 && onStep) {
-        const cx = Math.round(position.x / cellSize);
-        const cy = Math.round(position.z / cellSize);
-        onStep(maze.themeAt(cx, cy), sprinting);
-      }
+      if (bobLast <= 0 && s > 0 && onStep) onStep(position, sprinting);
       bobLast = s;
     } else {
       bobPhase = 0;
