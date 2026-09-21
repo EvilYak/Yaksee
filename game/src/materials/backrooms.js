@@ -59,7 +59,9 @@ export function makeWallpaperMaterial() {
   ctx.fillStyle = '#b7a24a';
   ctx.fillRect(0, 0, size, size);
 
-  // Bandes verticales alternées (lés de rouleau de papier peint) avant le motif.
+  // Bandes verticales alternées (lés de rouleau de papier peint, ~65cm de large
+  // en vrai) avant le motif — plus large que le motif lui-même, comme un vrai
+  // rouleau qui imprime plusieurs répétitions du dessin sur sa largeur.
   const bandCols = 5;
   const bandW = size / bandCols;
   for (let c = 0; c < bandCols; c++) {
@@ -68,17 +70,22 @@ export function makeWallpaperMaterial() {
   }
   drawColumnDashes(ctx, size, bandCols, '70,60,25', 0.35);
 
-  // Motif imprimé avant le vieillissement (taches/bruit par-dessus, comme un
-  // vrai papier peint qui se salit après avoir été posé). Deux passes légèrement
-  // décalées façon gaufrage : un trait clair en haut-gauche, un trait sombre en
-  // bas-droite du même motif, pour un léger relief avant même le bump map.
+  // Le motif lui-même doit rester petit (~20cm en vrai, comme sur la photo de
+  // référence) : un pan de mur entier (repeat 1,1, ~3.2m) avec seulement 5
+  // colonnes donnait des chevrons énormes (~65cm chacun), rien à voir avec un
+  // vrai papier peint. Beaucoup plus de répétitions dans chaque lé.
+  const motifCols = bandCols * 3;
+  const motifRows = 12;
+  // Deux passes légèrement décalées façon gaufrage : un trait clair en
+  // haut-gauche, un trait sombre en bas-droite du même motif, pour un léger
+  // relief avant même le bump map.
   ctx.save();
-  ctx.translate(-1.5, -1.5);
-  drawWallpaperPattern(ctx, size, { cols: bandCols, rows: 4, color: '212,196,138', alpha: 0.4 });
+  ctx.translate(-1, -1);
+  drawWallpaperPattern(ctx, size, { cols: motifCols, rows: motifRows, color: '212,196,138', alpha: 0.4 });
   ctx.restore();
   ctx.save();
-  ctx.translate(1.5, 1.5);
-  drawWallpaperPattern(ctx, size, { cols: bandCols, rows: 4, color: '82,68,28', alpha: 0.6 });
+  ctx.translate(1, 1);
+  drawWallpaperPattern(ctx, size, { cols: motifCols, rows: motifRows, color: '82,68,28', alpha: 0.6 });
   ctx.restore();
 
   // Décoloration inégale à grande échelle (jamais deux zones du mur de la
