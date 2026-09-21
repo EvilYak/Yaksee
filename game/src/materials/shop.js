@@ -123,7 +123,9 @@ export function makeMetalMaterial(hex = '#8a8a8f') {
 
 // Tableau noir d'arrière-boutique : les recettes viennent telles quelles de
 // la référence fournie par l'utilisateur (contenu du jeu, pas une invention).
-export function makeChalkboardMaterial() {
+// `lines` est paramétrable : le même tableau noir sert de liste de prix ici,
+// et servait de recettes dans une version précédente de la boutique.
+export function makeChalkboardMaterial(lines = ['GRAINES + EAU']) {
   const map = makeLabelTexture({
     width: 640,
     height: 360,
@@ -133,12 +135,7 @@ export function makeChalkboardMaterial() {
     fontWeight: '400',
     letterSpacing: 1,
     align: 'left',
-    lines: [
-      '- FLEUR = VERRE + EAU + (X) FLEUR',
-      '- PLANTE = POT + TERRE + (X)',
-      '',
-      'GRAINES + EAU',
-    ],
+    lines,
   });
   return new THREE.MeshStandardMaterial({ map, roughness: 0.95 });
 }

@@ -7,7 +7,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-    <title>THE PLANT SHOP</title>
+    <title>THE MAGIC SHOP</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
@@ -25,6 +25,7 @@
           <span id="objective-text">Préparez-vous pour les clients</span>
         </div>
         <div id="money">💶 <span id="money-value">0</span> €</div>
+        <div id="time">⏱ <span id="time-value">5:00</span></div>
         <button id="toggle-settings" class="toggle-btn" type="button">⚙</button>
       </div>
 
@@ -36,6 +37,7 @@
       <div id="npc-tag" class="hidden">
         <span>💬</span>
         <span id="npc-tag-name">Client</span>
+        <span id="npc-tag-request"></span>
       </div>
 
       <div id="dialogue-box" class="hidden">
@@ -68,24 +70,41 @@
         </div>
       </div>
 
-      <div id="craft-panel" class="hidden">
-        <div id="craft-card">
-          <div id="craft-title">COMPTOIR</div>
-          <div id="craft-money">💶 <span id="craft-money-value">0</span> €</div>
-          <div id="craft-stock"></div>
-          <div class="craft-section-title">Fabriquer</div>
-          <div id="craft-recipes"></div>
-          <div class="craft-section-title">Acheter</div>
-          <div id="craft-buy"></div>
-          <div class="craft-section-title">Vendre</div>
-          <div id="craft-sell"></div>
-          <button id="craft-close" type="button">FERMER</button>
+      <div id="register-panel" class="hidden">
+        <div id="register-card">
+          <div id="register-title">CAISSE</div>
+          <div id="register-money">💶 <span id="register-money-value">0</span> €</div>
+          <div class="panel-section-title">Client</div>
+          <div id="register-order"></div>
+          <div class="panel-section-title">Stock</div>
+          <div id="register-stock"></div>
+          <button id="register-close" type="button">FERMER</button>
+        </div>
+      </div>
+
+      <div id="trash-panel" class="hidden">
+        <div id="trash-card">
+          <div id="trash-title">POUBELLE</div>
+          <div class="panel-section-title">Jeter un objet</div>
+          <div id="trash-list"></div>
+          <button id="trash-close" type="button">FERMER</button>
+        </div>
+      </div>
+
+      <div id="shift-end" class="hidden">
+        <div id="shift-end-card">
+          <div id="shift-end-title">APRÈS-MIDI TERMINÉ</div>
+          <div id="shift-end-stats">
+            <div>💶 <span id="shift-end-money">0</span> € encaissés</div>
+            <div><span id="shift-end-served">0</span> client(s) servi(s)</div>
+          </div>
+          <button id="shift-end-restart" type="button">RECOMMENCER</button>
         </div>
       </div>
 
       <div id="boot-screen">
-        <div id="boot-title">THE PLANT SHOP</div>
-        <div id="boot-subtitle">plants are life.</div>
+        <div id="boot-title">THE MAGIC SHOP</div>
+        <div id="boot-subtitle">everything's an illusion.</div>
         <button id="start-btn">ENTRER</button>
       </div>
 

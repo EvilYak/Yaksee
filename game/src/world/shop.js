@@ -16,6 +16,7 @@ import {
   makeCarPaintMaterial,
 } from '../materials/index.js';
 import { buildCharacterBody } from './character.js';
+import { ITEMS } from '../economy.js';
 
 // Boutique de plantes : une seule scène fixe (pas de génération procédurale
 // de plan comme l'ancien labyrinthe) — un petit parking, une façade vitrée,
@@ -78,25 +79,6 @@ function limb(rTop, rBot, h, mat, segments = 8) {
   return new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, segments), mat);
 }
 
-function buildPottedPlant(potMat, foliageMat, scale = 1) {
-  const g = new THREE.Group();
-  const pot = limb(0.085 * scale, 0.065 * scale, 0.13 * scale, potMat, 8);
-  pot.position.y = 0.065 * scale;
-  g.add(pot);
-  const stem = limb(0.012 * scale, 0.016 * scale, 0.16 * scale, foliageMat, 6);
-  stem.position.y = 0.13 * scale + 0.08 * scale;
-  g.add(stem);
-  const leafCount = 3 + Math.floor(Math.random() * 3);
-  for (let i = 0; i < leafCount; i++) {
-    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09 * scale, 0), foliageMat);
-    const a = (i / leafCount) * Math.PI * 2;
-    leaf.position.set(Math.cos(a) * 0.06 * scale, 0.21 * scale + Math.random() * 0.05 * scale, Math.sin(a) * 0.06 * scale);
-    leaf.scale.y = 1.3;
-    g.add(leaf);
-  }
-  return g;
-}
-
 function buildDoor(w, h, doorMat, cx, cz, rotY = 0) {
   const g = new THREE.Group();
   const leaf = box(w, h, 0.06, doorMat);
@@ -104,6 +86,44 @@ function buildDoor(w, h, doorMat, cx, cz, rotY = 0) {
   g.add(leaf);
   g.position.set(cx, 0, cz);
   g.rotation.y = rotY;
+  return g;
+}
+
+// Articles de la boutique de magie, pour l'étagère et l'arrière-boutique —
+// toujours des prismes/cylindres pour les formes rondes (baguette, pièces,
+// chapeau), une boîte seulement pour le paquet de cartes qui en est
+// réellement une.
+function buildMagicProp(id, scale = 1) {
+  const g = new THREE.Group();
+  if (id === 'baguette') {
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.6 });
+    const wand = limb(0.008 * scale, 0.014 * scale, 0.26 * scale, woodMat, 6);
+    wand.rotation.z = Math.PI / 2;
+    wand.position.y = 0.03 * scale;
+    g.add(wand);
+    const tip = new THREE.Mesh(new THREE.IcosahedronGeometry(0.016 * scale, 0), new THREE.MeshStandardMaterial({ color: 0xe8e0c0, roughness: 0.3 }));
+    tip.position.set(0.13 * scale, 0.03 * scale, 0);
+    g.add(tip);
+  } else if (id === 'cartes') {
+    const deck = box(0.065 * scale, 0.02 * scale, 0.09 * scale, new THREE.MeshStandardMaterial({ color: 0x8a2020, roughness: 0.5 }));
+    deck.position.y = 0.01 * scale;
+    g.add(deck);
+  } else if (id === 'piece') {
+    const coinMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.7 });
+    for (let i = 0; i < 3; i++) {
+      const coin = limb(0.028 * scale, 0.028 * scale, 0.006 * scale, coinMat, 10);
+      coin.position.y = 0.003 * scale + i * 0.007 * scale;
+      g.add(coin);
+    }
+  } else if (id === 'chapeau') {
+    const hatMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.5 });
+    const brim = limb(0.11 * scale, 0.11 * scale, 0.015 * scale, hatMat, 12);
+    brim.position.y = 0.008 * scale;
+    g.add(brim);
+    const body = limb(0.075 * scale, 0.08 * scale, 0.13 * scale, hatMat, 12);
+    body.position.y = 0.08 * scale;
+    g.add(body);
+  }
   return g;
 }
 
@@ -120,8 +140,8 @@ export function buildShopWorld() {
   const counterMat = makeWoodMaterial('#6b4226');
   const glassMat = makeGlassMaterial();
   const metalMat = makeMetalMaterial();
-  const chalkMat = makeChalkboardMaterial();
-  const signMat = makeSignMaterial('THE PLANT SHOP', { bg: '#141210', fg: '#eef0d8', fontSize: 58 });
+  const chalkMat = makeChalkboardMaterial(ITEMS.map((item) => `${item.icon} ${item.label} — ${item.price} €`));
+  const signMat = makeSignMaterial('THE MAGIC SHOP', { bg: '#141210', fg: '#eef0d8', fontSize: 52 });
   const staffDoorMat = makeDoorMaterial('STAFF\nONLY');
   const bathDoorMat = makeDoorMaterial('WC');
   const potMat = makePotMaterial();
@@ -227,12 +247,16 @@ export function buildShopWorld() {
   winR.position.set(DOOR_W / 2 + glassRWidth / 2 + 0.15, 1.5, rz0 + 0.03);
   group.add(winR);
 
-  // Enseigne + texte extérieur.
+  // Enseigne + texte extérieur. Une PlaneGeometry par défaut regarde vers
+  // +Z ; côté parking (z négatif) on approche par -Z, donc sans un demi-tour
+  // ces panneaux montreraient leur dos — invisibles, pas juste mal cadrés.
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85), signMat);
-  sign.position.set(0.9, WALL_H + 0.15, rz0 - 0.02);
+  sign.position.set(0.9, WALL_H + 0.15, rz0 - WALL_T / 2 - 0.05);
+  sign.rotation.y = Math.PI;
   group.add(sign);
-  const tagline = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.32), makeSignMaterial('plants are life.', { bg: '#5a3d33', fg: '#e8e0c0', fontSize: 30 }));
-  tagline.position.set(-3, WALL_H - 0.35, rz0 - 0.02);
+  const tagline = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.32), makeSignMaterial("everything's an illusion.", { bg: '#5a3d33', fg: '#e8e0c0', fontSize: 24 }));
+  tagline.position.set(-3, WALL_H - 0.35, rz0 - WALL_T / 2 - 0.05);
+  tagline.rotation.y = Math.PI;
   group.add(tagline);
 
   const backWallMain = wallWithGap('x', rx1 - rx0, WALL_H, WALL_T, wallMat, 0, 0);
@@ -296,7 +320,20 @@ export function buildShopWorld() {
     group.add(bloom);
   }
 
-  const craftPoint = { x: 4.3, z: -2.2, radius: 1.7 };
+  const registerPoint = { x: 4.3, z: -2.2, radius: 1.7 };
+
+  // Radio de comptoir (décor pour l'instant — la musique viendra plus tard).
+  const radio = new THREE.Group();
+  const radioMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.5, metalness: 0.3 });
+  const radioBody = box(0.16, 0.1, 0.09, radioMat);
+  radioBody.position.y = 0.95 + 0.05;
+  radio.add(radioBody);
+  const antenna = limb(0.004, 0.004, 0.16, metalMat, 6);
+  antenna.position.set(0.06, 0.95 + 0.17, 0);
+  antenna.rotation.z = 0.3;
+  radio.add(antenna);
+  radio.position.set(4.3, 0, -2.7);
+  group.add(radio);
 
   // Téléphone du comptoir (appels de commande) : combiné + base, posé côté
   // client pour rester visible sans être caché par la caisse.
@@ -321,16 +358,24 @@ export function buildShopWorld() {
   // la mauvaise action selon la position exacte du joueur.
   const npc = { group: customer, position: customer.position, name: 'Client', radius: 1.4 };
 
-  // ---------- Étagère à plantes (mur gauche) ----------
+  // ---------- Étagère de présentation (mur gauche) ----------
   const shelf = box(0.28, 0.05, 2.6, woodMat);
   shelf.position.set(rx0 + 0.24, 1.0, 0.8);
   group.add(shelf);
-  for (let i = 0; i < 6; i++) {
-    const p = buildPottedPlant(potMat, i % 2 === 0 ? foliageMat : foliageMat2, 0.9 + Math.random() * 0.3);
-    p.position.set(rx0 + 0.24, 1.025, -0.3 + i * 0.45);
-    group.add(p);
-  }
+  ['baguette', 'cartes', 'piece', 'chapeau'].forEach((id, i) => {
+    const prop = buildMagicProp(id, 2.2);
+    prop.position.set(rx0 + 0.24, 1.025, -0.1 + i * 0.65);
+    group.add(prop);
+  });
   colliders.push({ minX: rx0 + 0.1, maxX: rx0 + 0.38, minZ: -0.55, maxZ: 2.15 });
+
+  // Poubelle : jette 1 unité d'un objet en stock (comptoir déjà surchargé,
+  // zone volontairement loin des autres points d'interaction).
+  const trashCan = limb(0.14, 0.11, 0.32, metalMat, 10);
+  trashCan.position.set(-3.5, 0.16, 1.0);
+  group.add(trashCan);
+  colliders.push({ minX: -3.65, maxX: -3.35, minZ: 0.85, maxZ: 1.15 });
+  const trashPoint = { x: -3.5, z: 1.0, radius: 1.0 };
 
   // Portes décoratives (arrière-boutique visible plus loin, ici juste WC).
   const wcDoor = buildDoor(0.9, 2.0, bathDoorMat, rx0 + 0.03, -2.6, Math.PI / 2);
@@ -369,24 +414,27 @@ export function buildShopWorld() {
   backFixture.position.set((bx0 + bx1) / 2, WALL_H - 0.04, 0);
   group.add(backFixture);
 
-  // Établi + tableau noir des recettes, contre le mur du fond.
+  // Établi de stock + tableau des prix, contre le mur du fond.
   const bench = box(2.4, 0.9, 0.6, woodMat);
   bench.position.set(8.2, 0.45, bz1 - 0.35);
   group.add(bench);
   addCollider(bench, 8.2, bz1 - 0.35);
 
   const chalkboard = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.0), chalkMat);
-  chalkboard.position.set(8.2, 1.75, bz1 - 0.03);
+  chalkboard.position.set(8.2, 1.75, bz1 - WALL_T / 2 - 0.05);
+  chalkboard.rotation.y = Math.PI;
   group.add(chalkboard);
 
-  // Sacs de terreau / graines sur l'établi.
-  const bagMat = new THREE.MeshStandardMaterial({ color: 0x8fae4a, roughness: 0.9 });
-  const bag = box(0.3, 0.35, 0.18, bagMat);
-  bag.position.set(7.2, 0.9 + 0.175, bz1 - 0.35);
-  group.add(bag);
-  const wateringCan = limb(0.09, 0.11, 0.18, metalMat, 8);
-  wateringCan.position.set(8.7, 0.9 + 0.09, bz1 - 0.35);
-  group.add(wateringCan);
+  // Caisse de stock de secours sur l'établi.
+  const crateMat = new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 0.9 });
+  const crate = box(0.32, 0.24, 0.3, crateMat);
+  crate.position.set(7.2, 0.9 + 0.12, bz1 - 0.35);
+  group.add(crate);
+  ['piece', 'baguette'].forEach((id, i) => {
+    const prop = buildMagicProp(id, 1.6);
+    prop.position.set(8.7 + i * 0.22, 0.9 + 0.03, bz1 - 0.35);
+    group.add(prop);
+  });
 
   // Porte STAFF ONLY entre les deux salles.
   const staffDoorPanel = box(DOOR_W - 0.1, DOOR_H, 0.06, staffDoorMat);
@@ -397,5 +445,5 @@ export function buildShopWorld() {
   const startWorldPos = new THREE.Vector3(0, 0, -9);
   const startYaw = Math.PI;
 
-  return { group, colliders, craftPoint, phonePoint, npc, startWorldPos, startYaw };
+  return { group, colliders, registerPoint, phonePoint, trashPoint, npc, startWorldPos, startYaw };
 }

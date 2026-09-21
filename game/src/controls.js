@@ -7,7 +7,8 @@ const RUN_SPEED = 4.2;
 
 const GAMEPAD_DEADZONE = 0.16;
 const GAMEPAD_LOOK_SPEED = 2.6;
-const GAMEPAD_SPRINT_BUTTON = 0;
+const GAMEPAD_SPRINT_BUTTON = 0; // A / Cross
+const GAMEPAD_INTERACT_BUTTON = 2; // X / Square
 
 function applyDeadzone(v, dz = GAMEPAD_DEADZONE) {
   if (Math.abs(v) < dz) return 0;
@@ -170,23 +171,36 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
   }
 
   // ---------- Manette (Gamepad API, pollée à chaque frame) ----------
-  function pollGamepad() {
+  function firstGamepad() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    let pad = null;
     for (const p of pads) {
-      if (p) {
-        pad = p;
-        break;
-      }
+      if (p) return p;
     }
-    if (!pad) return { x: 0, y: 0, lookX: 0, lookY: 0, sprint: false };
+    return null;
+  }
 
+  function pollGamepad() {
+    const pad = firstGamepad();
+    if (!pad) return { x: 0, y: 0, lookX: 0, lookY: 0, sprint: false };
     const x = applyDeadzone(pad.axes[0] || 0);
     const y = -applyDeadzone(pad.axes[1] || 0);
     const lookX = applyDeadzone(pad.axes[2] || 0);
     const lookY = applyDeadzone(pad.axes[3] || 0);
     const sprint = !!(pad.buttons[GAMEPAD_SPRINT_BUTTON] && pad.buttons[GAMEPAD_SPRINT_BUTTON].pressed);
     return { x, y, lookX, lookY, sprint };
+  }
+
+  // Bouton d'interaction : détecté indépendamment de update() (donc même
+  // pendant une pause menu/dialogue, sans quoi la manette ne pourrait ni
+  // fermer un panneau ni faire avancer un dialogue) et sur le front montant
+  // uniquement, pour ne déclencher l'action qu'une fois par appui.
+  let prevInteractHeld = false;
+  function pollInteractPressed() {
+    const pad = firstGamepad();
+    const held = !!(pad && pad.buttons[GAMEPAD_INTERACT_BUTTON] && pad.buttons[GAMEPAD_INTERACT_BUTTON].pressed);
+    const pressed = held && !prevInteractHeld;
+    prevInteractHeld = held;
+    return pressed;
   }
 
   // ---------- Collision : boîtes alignées aux axes (mur, comptoir, voiture...) ----------
@@ -274,5 +288,5 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
     return { moving: speedScale > 0.05, sprinting, position };
   }
 
-  return { update, position, setSensitivity, setInvertY };
+  return { update, position, setSensitivity, setInvertY, pollInteractPressed };
 }

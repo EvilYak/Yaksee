@@ -97,6 +97,19 @@ html, body {
   padding: 6px 10px;
 }
 
+#time {
+  position: absolute;
+  top: max(52px, calc(env(safe-area-inset-top) + 36px));
+  right: 64px;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(238, 240, 216, 0.3);
+  border-radius: 3px;
+  padding: 5px 10px;
+}
+
 .toggle-btn {
   font-family: inherit;
   font-size: 13px;
@@ -316,9 +329,10 @@ html, body {
   background: #6f8f36;
 }
 
-/* ---------- Comptoir / fabrication ---------- */
+/* ---------- Panneaux (caisse / poubelle) ---------- */
 
-#craft-panel {
+#register-panel,
+#trash-panel {
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -330,11 +344,13 @@ html, body {
   pointer-events: auto;
 }
 
-#craft-panel.hidden {
+#register-panel.hidden,
+#trash-panel.hidden {
   display: none;
 }
 
-#craft-card {
+#register-card,
+#trash-card {
   width: min(420px, 100%);
   max-height: 80vh;
   overflow-y: auto;
@@ -345,7 +361,8 @@ html, body {
   color: #eef0d8;
 }
 
-#craft-title {
+#register-title,
+#trash-title {
   font-size: 14px;
   letter-spacing: 4px;
   opacity: 0.85;
@@ -353,44 +370,31 @@ html, body {
   text-align: center;
 }
 
-#craft-money {
+#register-money {
   text-align: center;
   font-size: 15px;
   color: #8fae4a;
   margin-bottom: 14px;
 }
 
-.craft-section-title {
+.panel-section-title {
   font-size: 11px;
   letter-spacing: 2px;
   opacity: 0.6;
-  margin-bottom: 8px;
+  margin: 14px 0 8px;
 }
 
-#craft-buy,
-#craft-sell {
+#register-order,
+#register-stock,
+#trash-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-bottom: 18px;
 }
 
-#craft-stock {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+#register-stock {
   font-size: 12px;
-  opacity: 0.8;
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(238, 240, 216, 0.15);
-}
-
-#craft-recipes {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 18px;
+  opacity: 0.85;
 }
 
 .recipe-row {
@@ -421,8 +425,10 @@ html, body {
   color: rgba(238, 240, 216, 0.4);
 }
 
-#craft-close {
+#register-close,
+#trash-close {
   width: 100%;
+  margin-top: 18px;
   padding: 11px;
   font-family: inherit;
   font-size: 12px;
@@ -430,6 +436,60 @@ html, body {
   color: #eef0d8;
   background: transparent;
   border: 1px solid rgba(238, 240, 216, 0.3);
+  border-radius: 2px;
+}
+
+/* ---------- Fin de session ---------- */
+
+#shift-end {
+  position: absolute;
+  inset: 0;
+  z-index: 28;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 5, 3, 0.9);
+  padding: 24px;
+}
+
+#shift-end.hidden {
+  display: none;
+}
+
+#shift-end-card {
+  width: min(360px, 100%);
+  background: #1c1a15;
+  border: 1px solid rgba(238, 240, 216, 0.25);
+  border-radius: 4px;
+  padding: 26px;
+  color: #eef0d8;
+  text-align: center;
+}
+
+#shift-end-title {
+  font-size: 16px;
+  letter-spacing: 3px;
+  margin-bottom: 18px;
+}
+
+#shift-end-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  opacity: 0.9;
+  margin-bottom: 20px;
+}
+
+#shift-end-restart {
+  width: 100%;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: #141210;
+  background: #8fae4a;
+  border: none;
   border-radius: 2px;
 }
 

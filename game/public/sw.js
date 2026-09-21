@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plantshop-v1';
+const CACHE_NAME = 'magicshop-v1';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

@@ -1,7 +1,7 @@
 {
-  "name": "The Plant Shop",
-  "short_name": "Plant Shop",
-  "description": "Gérez votre petite boutique de plantes : cultivez, fabriquez, vendez.",
+  "name": "The Magic Shop",
+  "short_name": "Magic Shop",
+  "description": "Tenez votre boutique de magie le temps d'un après-midi : servez les clients, encaissez, gérez votre stock.",
   "start_url": "./index.html",
   "display": "fullscreen",
   "orientation": "landscape-primary",
