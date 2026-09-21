@@ -47,7 +47,10 @@ export function createToolRuntime({ scene, camera, heldToolGroup, cleaning, audi
   function useHeldTool() {
     const hit = aimedStain();
     if (!hit) return;
-    if (cleaning.clean(hit.object, heldTool)) audio.registerBeep();
+    if (cleaning.clean(hit.object, heldTool)) {
+      if (heldTool === 'balai') audio.sweep();
+      else audio.plunge();
+    }
   }
 
   function throwHeldTool(force) {
@@ -81,6 +84,7 @@ export function createToolRuntime({ scene, camera, heldToolGroup, cleaning, audi
       if (!settled) continue;
       landedTools.push(projectiles[i].mesh);
       projectiles.splice(i, 1);
+      audio.thud();
       if (landedTools.length > MAX_LANDED_TOOLS) {
         const oldest = landedTools.shift();
         scene.remove(oldest);

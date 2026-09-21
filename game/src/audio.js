@@ -83,22 +83,99 @@ export function createAudio() {
     });
   }
 
-  // Bip de confirmation (caisse / fabrication réussie).
+  // Confirmation de caisse : deux notes qui montent vite ("cha-ching"),
+  // pas un simple bip carré isolé.
   function registerBeep() {
     if (!started || !ctx) return;
     const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    osc.type = 'square';
-    osc.frequency.value = 1200;
+    [1046.5, 1568].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      const start = t + i * 0.045;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.11, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(start);
+      osc.stop(start + 0.12);
+    });
+  }
+
+  // Coup de balai : un souffle de bruit filtré, plus deux petits crissements
+  // (le contact des brins sur le sol) — pas le même bip que la caisse.
+  function sweep() {
+    if (!started || !ctx) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.22, ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2200;
+    filter.Q.value = 0.6;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(0.12, t + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    gain.gain.linearRampToValueAtTime(0.16, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    src.start(t);
+    src.stop(t + 0.24);
+  }
+
+  // Débouche-chiotte : ventouse grave + squelch, très différent du balai.
+  function plunge() {
+    if (!started || !ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(130, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.18);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.0001, t);
+    oscGain.gain.linearRampToValueAtTime(0.22, t + 0.02);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    osc.connect(oscGain);
+    oscGain.connect(master);
+    osc.start(t);
+    osc.stop(t + 0.23);
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.18, ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 500;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t + 0.04);
+    gain.gain.linearRampToValueAtTime(0.12, t + 0.07);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    src.start(t);
+    src.stop(t + 0.2);
+  }
+
+  // Impact sourd d'un outil jeté qui atterrit.
+  function thud() {
+    if (!started || !ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.09);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(0.2, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
     osc.connect(gain);
     gain.connect(master);
     osc.start(t);
-    osc.stop(t + 0.12);
+    osc.stop(t + 0.15);
   }
 
-  return { start, footstep, doorChime, registerBeep };
+  return { start, footstep, doorChime, registerBeep, sweep, plunge, thud };
 }

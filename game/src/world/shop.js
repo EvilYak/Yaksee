@@ -87,37 +87,154 @@ function limb(rTop, rBot, h, mat, segments = 8) {
 // toujours des prismes/cylindres pour les formes rondes (baguette, pièces,
 // chapeau), une boîte seulement pour le paquet de cartes qui en est
 // réellement une.
+// Dos de carte à jouer : bordure + losange central, pour qu'un paquet se
+// reconnaisse comme un paquet de cartes et pas comme une boîte rouge unie.
+function makeCardBackTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#7a1c1c';
+  ctx.fillRect(0, 0, 64, 64);
+  ctx.strokeStyle = '#d9c48a';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(4, 4, 56, 56);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(32, 10);
+  ctx.lineTo(54, 32);
+  ctx.lineTo(32, 54);
+  ctx.lineTo(10, 32);
+  ctx.closePath();
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function buildMagicProp(id, scale = 1) {
   const g = new THREE.Group();
   if (id === 'baguette') {
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.6 });
-    const wand = limb(0.008 * scale, 0.014 * scale, 0.26 * scale, woodMat, 6);
-    wand.rotation.z = Math.PI / 2;
-    wand.position.y = 0.03 * scale;
-    g.add(wand);
-    const tip = new THREE.Mesh(new THREE.IcosahedronGeometry(0.016 * scale, 0), new THREE.MeshStandardMaterial({ color: 0xe8e0c0, roughness: 0.3 }));
-    tip.position.set(0.13 * scale, 0.03 * scale, 0);
-    g.add(tip);
+    // Poignée (bois sombre + anneaux de prise) + virole en laiton + fût
+    // effilé (bois clair) + pointe + gemme — assemblés le long de Y puis
+    // couchés sur X, plutôt qu'un unique bâton sans articulation.
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.65 });
+    const paleWood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.55 });
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.75 });
+    const gemMat = new THREE.MeshStandardMaterial({ color: 0xe8e0c0, roughness: 0.25 });
+
+    const rod = new THREE.Group();
+    let y = 0;
+
+    const handleH = 0.07 * scale;
+    const handle = limb(0.013 * scale, 0.011 * scale, handleH, darkWood, 6);
+    handle.position.y = y + handleH / 2;
+    rod.add(handle);
+    for (let i = 0; i < 2; i++) {
+      const ring = limb(0.0145 * scale, 0.0145 * scale, 0.006 * scale, darkWood, 6);
+      ring.position.y = y + handleH * (0.3 + i * 0.4);
+      rod.add(ring);
+    }
+    y += handleH;
+
+    const ferruleH = 0.012 * scale;
+    const ferrule = limb(0.0115 * scale, 0.0115 * scale, ferruleH, brassMat, 8);
+    ferrule.position.y = y + ferruleH / 2;
+    rod.add(ferrule);
+    y += ferruleH;
+
+    const shaftH = 0.15 * scale;
+    const shaft = limb(0.008 * scale, 0.0105 * scale, shaftH, paleWood, 6);
+    shaft.position.y = y + shaftH / 2;
+    rod.add(shaft);
+    y += shaftH;
+
+    const tipH = 0.02 * scale;
+    const tip = limb(0.001 * scale, 0.009 * scale, tipH, paleWood, 6);
+    tip.position.y = y + tipH / 2;
+    rod.add(tip);
+    y += tipH;
+
+    const gem = new THREE.Mesh(new THREE.IcosahedronGeometry(0.012 * scale, 0), gemMat);
+    gem.position.y = y;
+    rod.add(gem);
+
+    // Couché le long de Z (parallèle à l'étagère/au mur), pas le long de X :
+    // sans ça la baguette pointe droit vers/depuis le mur et ne se voit
+    // presque pas de face — juste un point sombre, pas un objet reconnaissable.
+    rod.position.y = -y / 2;
+    rod.rotation.x = Math.PI / 2;
+    g.add(rod);
   } else if (id === 'cartes') {
-    const deck = box(0.065 * scale, 0.02 * scale, 0.09 * scale, new THREE.MeshStandardMaterial({ color: 0x8a2020, roughness: 0.5 }));
-    deck.position.y = 0.01 * scale;
-    g.add(deck);
+    // Petit paquet légèrement éventé : plusieurs cartes fines empilées avec
+    // un décalage aléatoire, la carte du dessus portant le motif du dos —
+    // plus une simple boîte rouge unie.
+    const backMat = new THREE.MeshStandardMaterial({ map: makeCardBackTexture(), roughness: 0.5 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xe4dcc4, roughness: 0.6 });
+    const cardW = 0.062 * scale;
+    const cardD = 0.088 * scale;
+    const cardH = 0.0022 * scale;
+    const count = 7;
+    for (let i = 0; i < count; i++) {
+      const card = box(cardW, cardH, cardD, i === count - 1 ? backMat : edgeMat);
+      card.position.set((Math.random() - 0.5) * 0.004 * scale, i * cardH, (Math.random() - 0.5) * 0.004 * scale);
+      card.rotation.y = (Math.random() - 0.5) * 0.18;
+      g.add(card);
+    }
   } else if (id === 'piece') {
     const coinMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.7 });
     for (let i = 0; i < 3; i++) {
       const coin = limb(0.028 * scale, 0.028 * scale, 0.006 * scale, coinMat, 10);
       coin.position.y = 0.003 * scale + i * 0.007 * scale;
+      coin.rotation.y = Math.random() * Math.PI;
       g.add(coin);
     }
   } else if (id === 'chapeau') {
     const hatMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.5 });
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x5a1418, roughness: 0.5 });
     const brim = limb(0.11 * scale, 0.11 * scale, 0.015 * scale, hatMat, 12);
     brim.position.y = 0.008 * scale;
     g.add(brim);
     const body = limb(0.075 * scale, 0.08 * scale, 0.13 * scale, hatMat, 12);
     body.position.y = 0.08 * scale;
     g.add(body);
+    // Ruban à la base de la calotte, pour casser le noir uniforme.
+    const band = limb(0.081 * scale, 0.081 * scale, 0.022 * scale, bandMat, 12);
+    band.position.y = 0.028 * scale;
+    g.add(band);
   }
+  return g;
+}
+
+// Poubelle : corps fuselé facetté + bourrelet de renfort + rebord + couvercle
+// entrouvert avec anse — plusieurs pièces assemblées, plutôt qu'un unique
+// tronc de cône sans détail.
+function buildTrashCan(bodyMat) {
+  const g = new THREE.Group();
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xb8b8bc, roughness: 0.35, metalness: 0.6 });
+
+  const body = limb(0.16, 0.125, 0.34, bodyMat, 8);
+  body.position.y = 0.17;
+  g.add(body);
+
+  const ridge = limb(0.158, 0.158, 0.02, bodyMat, 8);
+  ridge.position.y = 0.17;
+  g.add(ridge);
+
+  const rim = limb(0.17, 0.16, 0.025, rimMat, 8);
+  rim.position.y = 0.3525;
+  g.add(rim);
+
+  // Couvercle posé de travers, légèrement entrouvert.
+  const lid = limb(0.175, 0.16, 0.03, bodyMat, 8);
+  lid.position.set(0.02, 0.385, 0);
+  lid.rotation.z = 0.2;
+  g.add(lid);
+
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.007, 6, 10, Math.PI), rimMat);
+  handle.position.set(0.02, 0.42, 0);
+  handle.rotation.set(Math.PI / 2, 0.2, 0);
+  g.add(handle);
+
   return g;
 }
 
@@ -464,10 +581,10 @@ export function buildShopWorld() {
 
   // Poubelle : jette 1 unité d'un objet en stock (comptoir déjà surchargé,
   // zone volontairement loin des autres points d'interaction).
-  const trashCan = limb(0.14, 0.11, 0.32, metalMat, 10);
-  trashCan.position.set(-3.5, 0.16, 1.0);
+  const trashCan = buildTrashCan(metalMat);
+  trashCan.position.set(-3.5, 0, 1.0);
   group.add(trashCan);
-  colliders.push({ minX: -3.65, maxX: -3.35, minZ: 0.85, maxZ: 1.15 });
+  colliders.push({ minX: -3.68, maxX: -3.32, minZ: 0.82, maxZ: 1.18 });
   const trashPoint = { x: -3.5, z: 1.0, radius: 1.0 };
 
   // Porte des WC : coulisse à l'approche (voir doors.js) — plus une simple
