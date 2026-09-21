@@ -1,258 +1,13 @@
 import * as THREE from 'three';
-import {
-  makeWallpaperMaterial,
-  makeCarpetMaterial,
-  makeCeilingMaterial,
-  makeLightStripMaterial,
-  makePoolTileMaterial,
-  makePoolFloorMaterial,
-  makePoolCeilingMaterial,
-  makeHotelFacadeMaterial,
-  makeCourtyardFloorMaterial,
-  makeSkyCloudsMaterial,
-  makeGrassPathMaterial,
-  makeHouseMaterial,
-  makeRoofMaterial,
-  makeWindowDecalMaterial,
-  makeDoorDecalMaterial,
-  makeKittyWallpaperMaterial,
-  makeKittyCarpetMaterial,
-  makeKittyCeilingMaterial,
-  makeMirrorDecalMaterial,
-  makeWaterMaterial,
-} from './materials.js';
-import { ZONES, DEFAULT_THEME, DEFAULT_WALL_HEIGHT, wallHeightFor } from './zones.js';
+import { makeLightStripMaterial, makeHouseMaterial, makeRoofMaterial, makeMirrorDecalMaterial, makeWaterMaterial } from './materials/index.js';
+import { ZONES, DEFAULT_THEME, DEFAULT_WALL_HEIGHT } from './zones.js';
+import { addChunkedInstances } from './world/chunking.js';
+import { rectWorldExtent, buildFloorWithHoles, collectCellEdges, buildEdgeGridMesh } from './world/geometry.js';
+import { buildHouse, buildMirror, buildStreetlight } from './world/decor.js';
+import { buildThemeConfig } from './world/theme-config.js';
 
 export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
 const WALL_THICKNESS = 0.12;
-
-function buildThemeConfig() {
-  return {
-    backrooms: {
-      wall: [makeWallpaperMaterial(), makeWallpaperMaterial(), makeWallpaperMaterial()],
-      floor: makeCarpetMaterial(),
-      ceiling: makeCeilingMaterial(),
-      lightColor: new THREE.Color(0xffffff),
-      fog: new THREE.Color(0x8c8256),
-      fogDensity: 0.055,
-      wallHeight: DEFAULT_WALL_HEIGHT,
-      lights: true,
-    },
-    pool: {
-      wall: makePoolTileMaterial(),
-      floor: makePoolFloorMaterial(),
-      ceiling: makePoolCeilingMaterial(),
-      lightColor: new THREE.Color(0xdff2ff),
-      fog: new THREE.Color(0x93a8ab),
-      fogDensity: 0.05,
-      wallHeight: DEFAULT_WALL_HEIGHT,
-      lights: true,
-    },
-    kitty: {
-      wall: [makeKittyWallpaperMaterial(), makeKittyWallpaperMaterial(), makeKittyWallpaperMaterial()],
-      floor: makeKittyCarpetMaterial(),
-      ceiling: makeKittyCeilingMaterial(),
-      lightColor: new THREE.Color(0xffd3ec),
-      fog: new THREE.Color(0xd9a8c4),
-      fogDensity: 0.05,
-      wallHeight: DEFAULT_WALL_HEIGHT,
-      lights: true,
-    },
-    hotel: {
-      wall: makeHotelFacadeMaterial(),
-      floor: makeCourtyardFloorMaterial(),
-      ceiling: new THREE.MeshBasicMaterial({ color: 0x14151c, toneMapped: false }),
-      lightColor: new THREE.Color(0xbcd4ff),
-      fog: new THREE.Color(0x2c3044),
-      fogDensity: 0.024,
-      wallHeight: wallHeightFor('hotel'),
-      lights: false,
-    },
-    neighborhood: {
-      wall: makeSkyCloudsMaterial(),
-      floor: makeGrassPathMaterial(),
-      ceiling: new THREE.MeshBasicMaterial({ color: 0xcfe6e8, toneMapped: false }),
-      lightColor: new THREE.Color(0xfff1d0),
-      fog: new THREE.Color(0xdde7d8),
-      fogDensity: 0.02,
-      wallHeight: wallHeightFor('neighborhood'),
-      lights: false,
-    },
-  };
-}
-
-function rectWorldExtent([x0, y0, w, h], C) {
-  const minX = x0 * C - C / 2;
-  const maxX = (x0 + w - 1) * C + C / 2;
-  const minZ = y0 * C - C / 2;
-  const maxZ = (y0 + h - 1) * C + C / 2;
-  return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, w: maxX - minX, h: maxZ - minZ };
-}
-
-function buildFloorWithHoles(size, C, holeRects, material) {
-  const half = C / 2;
-  const minX = -half;
-  const maxX = (size - 1) * C + half;
-  const minZ = -half;
-  const maxZ = (size - 1) * C + half;
-  const shape = new THREE.Shape();
-  shape.moveTo(minX, minZ);
-  shape.lineTo(maxX, minZ);
-  shape.lineTo(maxX, maxZ);
-  shape.lineTo(minX, maxZ);
-  shape.closePath();
-  holeRects.forEach((rect) => {
-    const e = rectWorldExtent(rect, C);
-    const hole = new THREE.Path();
-    hole.moveTo(e.minX, e.minZ);
-    hole.lineTo(e.maxX, e.minZ);
-    hole.lineTo(e.maxX, e.maxZ);
-    hole.lineTo(e.minX, e.maxZ);
-    hole.closePath();
-    shape.holes.push(hole);
-  });
-  const geo = new THREE.ShapeGeometry(shape);
-  const mesh = new THREE.Mesh(geo, material);
-  mesh.rotation.x = -Math.PI / 2;
-  return mesh;
-}
-
-// Vrai toit à deux pans (deux plaques inclinées + pignons triangulaires),
-// au lieu d'un simple pavé posé à plat.
-function buildRoof(width, wallHeight, depth, roofRise, mat) {
-  const group = new THREE.Group();
-  const halfW = width / 2;
-  const slopeLen = Math.sqrt(halfW * halfW + roofRise * roofRise);
-  const angle = Math.atan2(roofRise, halfW);
-  const overhang = 0.35;
-  const slabGeo = new THREE.BoxGeometry(slopeLen + overhang, 0.1, depth + overhang);
-
-  const left = new THREE.Mesh(slabGeo, mat);
-  left.position.set(-halfW / 2, wallHeight + roofRise / 2, 0);
-  left.rotation.z = angle;
-  group.add(left);
-
-  const right = new THREE.Mesh(slabGeo, mat);
-  right.position.set(halfW / 2, wallHeight + roofRise / 2, 0);
-  right.rotation.z = -angle;
-  group.add(right);
-
-  const gableShape = new THREE.Shape();
-  gableShape.moveTo(-halfW, 0);
-  gableShape.lineTo(halfW, 0);
-  gableShape.lineTo(0, roofRise);
-  gableShape.closePath();
-  const gableGeo = new THREE.ShapeGeometry(gableShape);
-
-  const gableFront = new THREE.Mesh(gableGeo, mat);
-  gableFront.position.set(0, wallHeight, depth / 2);
-  group.add(gableFront);
-
-  const gableBack = new THREE.Mesh(gableGeo, mat);
-  gableBack.position.set(0, wallHeight, -depth / 2);
-  gableBack.rotation.y = Math.PI;
-  group.add(gableBack);
-
-  // Faîtière : couvre la jonction entre les deux pans (sinon un petit interstice
-  // reste visible à l'épaisseur des plaques, comme un toit sans faîtage réel).
-  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, depth + overhang + 0.05), mat);
-  ridge.position.set(0, wallHeight + roofRise, 0);
-  group.add(ridge);
-
-  return group;
-}
-
-// Porte avec un vrai battant en relief (pas un simple décalque plat) + poignée.
-function buildDoor(width, height, mat) {
-  const group = new THREE.Group();
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.08), mat);
-  panel.position.z = 0.04;
-  group.add(panel);
-
-  const handle = new THREE.Mesh(
-    new THREE.SphereGeometry(0.045, 8, 8),
-    new THREE.MeshStandardMaterial({ color: 0xd8c98a, metalness: 0.7, roughness: 0.3 }),
-  );
-  handle.position.set(width * 0.32, 0, 0.11);
-  group.add(handle);
-
-  return group;
-}
-
-// Fenêtre avec cadre saillant + appui, la vitre elle-même a un peu d'épaisseur.
-function buildWindow(width, height, paneColor, frameMat) {
-  const group = new THREE.Group();
-
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(width + 0.12, height + 0.12, 0.06), frameMat);
-  group.add(frame);
-
-  const pane = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.03), makeWindowDecalMaterial(paneColor));
-  pane.position.z = 0.025;
-  group.add(pane);
-
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(width + 0.24, 0.06, 0.16), frameMat);
-  sill.position.set(0, -height / 2 - 0.06, 0.08);
-  group.add(sill);
-
-  return group;
-}
-
-function buildHouse({ width, wallHeight, depth, roofRise, hue, roofMat }) {
-  const group = new THREE.Group();
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(width, wallHeight, depth), makeHouseMaterial(hue));
-  body.position.y = wallHeight / 2;
-  group.add(body);
-
-  group.add(buildRoof(width, wallHeight, depth, roofRise, roofMat));
-
-  const door = buildDoor(0.9, 1.9, makeDoorDecalMaterial());
-  door.position.set(0, 0.95, depth / 2);
-  group.add(door);
-
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f2ea, roughness: 0.7 });
-  const litColors = [0xffdf9e, 0xffdf9e, 0x9fc7e8];
-  [-1, 1].forEach((side) => {
-    const lit = Math.random() < 0.65;
-    const c = lit ? litColors[Math.floor(Math.random() * litColors.length)] : 0x2a2a24;
-    const win = buildWindow(0.85, 1.05, c, frameMat);
-    win.position.set(side * width * 0.28, wallHeight * 0.62, depth / 2);
-    group.add(win);
-  });
-
-  return group;
-}
-
-// Miroir avec un vrai cadre en relief (tore) au lieu d'un simple disque plat.
-function buildMirror(glassMat, frameMat) {
-  const group = new THREE.Group();
-  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.4, 24), glassMat);
-  group.add(glass);
-  const frame = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.045, 8, 24), frameMat);
-  frame.position.z = -0.015;
-  group.add(frame);
-  group.scale.set(1, 1.4, 1);
-  return group;
-}
-
-function buildStreetlight() {
-  const group = new THREE.Group();
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.06, 3.1, 8),
-    new THREE.MeshStandardMaterial({ color: 0x27282a, roughness: 0.6, metalness: 0.4 }),
-  );
-  pole.position.y = 1.55;
-  group.add(pole);
-
-  const bulb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.16, 10, 10),
-    new THREE.MeshBasicMaterial({ color: 0xffe9b0, toneMapped: false }),
-  );
-  bulb.position.y = 3.15;
-  group.add(bulb);
-
-  return group;
-}
 
 export function buildWorld(maze) {
   const { size, cellSize: C } = maze;
@@ -266,109 +21,6 @@ export function buildWorld(maze) {
     if (t1 !== DEFAULT_THEME) return t1;
     if (t2 !== DEFAULT_THEME) return t2;
     return DEFAULT_THEME;
-  }
-
-  const dummy = new THREE.Object3D();
-
-  // Le labyrinthe entier tient dans quelques gros InstancedMesh si on ne les
-  // découpe pas — le moteur devrait alors redessiner toute la carte à chaque
-  // image, même hors champ de vision. On répartit plutôt chaque catégorie de
-  // géométrie (murs, plinthes, joints...) en petits paquets spatiaux : chacun
-  // obtient son propre volume englobant, donc son propre frustum culling.
-  const CHUNK_CELLS = 8;
-  const chunkWorldSize = CHUNK_CELLS * C;
-  function chunkKeyOf(px, pz) {
-    return `${Math.floor(px / chunkWorldSize)},${Math.floor(pz / chunkWorldSize)}`;
-  }
-  function groupByChunk(list) {
-    const map = new Map();
-    for (const entry of list) {
-      const key = chunkKeyOf(entry[0], entry[1]);
-      let arr = map.get(key);
-      if (!arr) {
-        arr = [];
-        map.set(key, arr);
-      }
-      arr.push(entry);
-    }
-    return map;
-  }
-  // Un même matériau répété sur toute la carte se voit immédiatement (le
-  // même motif de taches revient à chaque pan de mur) — quand `material`
-  // est un tableau de variantes, chaque chunk en tire une au hasard, mais de
-  // façon stable (hash de sa clé) pour ne pas changer d'une frame à l'autre.
-  function pickVariant(material, key) {
-    if (!Array.isArray(material)) return material;
-    let h = 0;
-    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-    return material[Math.abs(h) % material.length];
-  }
-
-  // Hash déterministe (position -> [0,1)) pour tirer un décalage UV stable
-  // par instance : même bâtiment reconstruit = même décalage, pas de
-  // scintillement d'une frame à l'autre ni d'une partie à l'autre.
-  function hash01(x, y, salt) {
-    const s = Math.sin(x * 127.1 + y * 311.7 + salt * 269.5) * 43758.5453123;
-    return s - Math.floor(s);
-  }
-
-  function addChunkedInstances(targetGroup, list, geometry, material, placeFn) {
-    if (!list.length) return;
-    groupByChunk(list).forEach((entries, key) => {
-      const mat = pickVariant(material, key);
-      const uvVariation = !!(mat && mat.userData && mat.userData.uvVariation);
-      // Les attributs instanciés vivent sur la géométrie : elle est partagée
-      // entre tous les chunks/thèmes (voir geosFor), donc on la clone dès
-      // qu'on doit y poser un attribut propre à ce chunk précis.
-      const geo = uvVariation ? geometry.clone() : geometry;
-      const mesh = new THREE.InstancedMesh(geo, mat, entries.length);
-      if (uvVariation) {
-        const offsets = new Float32Array(entries.length * 2);
-        const flips = new Float32Array(entries.length);
-        entries.forEach(([px, pz], i) => {
-          offsets[i * 2] = hash01(px, pz, 1.3);
-          offsets[i * 2 + 1] = hash01(px, pz, 7.9);
-          flips[i] = hash01(px, pz, 4.1) > 0.5 ? 1 : 0;
-        });
-        geo.setAttribute('instanceUvOffset', new THREE.InstancedBufferAttribute(offsets, 2));
-        geo.setAttribute('instanceUvFlip', new THREE.InstancedBufferAttribute(flips, 1));
-      }
-      entries.forEach((entry, i) => {
-        placeFn(dummy, entry);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
-      targetGroup.add(mesh);
-    });
-  }
-
-  // Toutes les frontières internes de cellules dont le thème appartient à
-  // `themeSet` — sert à quadriller le plafond (T-bar) et le sol (joints)
-  // avec de vrais segments 3D plutôt qu'une texture peinte.
-  function collectCellEdges(themeSet) {
-    const v = [];
-    const h = [];
-    for (let x = 0; x < size; x++) {
-      for (let y = 0; y < size; y++) {
-        if (!themeSet.has(maze.themeAt(x, y))) continue;
-        if (x < size - 1) v.push([x * C + C / 2, y * C]);
-        if (y < size - 1) h.push([x * C, y * C + C / 2]);
-      }
-    }
-    return { v, h };
-  }
-
-  function buildEdgeGridMesh(edges, { thickness, depth, y, color }) {
-    const gridGroup = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
-    const vGeo = new THREE.BoxGeometry(thickness, depth, C);
-    const hGeo = new THREE.BoxGeometry(C, depth, thickness);
-    const place = (d, [px, pz]) => d.position.set(px, y, pz);
-    addChunkedInstances(gridGroup, edges.v, vGeo, mat, place);
-    addChunkedInstances(gridGroup, edges.h, hGeo, mat, place);
-    return gridGroup;
   }
 
   // ---------- Sol : base "backrooms" pleine étendue + poches thématiques ----------
@@ -410,15 +62,13 @@ export function buildWorld(maze) {
   }
 
   // ---------- Plafond suspendu : vraie grille en relief (T-bar), pas une texture ----------
-  const flatCeilingEdges = collectCellEdges(new Set(['backrooms', 'pool', 'kitty']));
+  const flatCeilingEdges = collectCellEdges(maze, size, C, new Set(['backrooms', 'pool', 'kitty']));
   group.add(
-    buildEdgeGridMesh(flatCeilingEdges, { thickness: 0.05, depth: 0.05, y: WALL_HEIGHT - 0.025, color: 0x736c58 }),
+    buildEdgeGridMesh(flatCeilingEdges, { thickness: 0.05, depth: 0.05, y: WALL_HEIGHT - 0.025, color: 0x736c58 }, C),
   );
 
   // ---------- Sol : joints en relief (moquette/carrelage) sous les mêmes zones ----------
-  group.add(
-    buildEdgeGridMesh(flatCeilingEdges, { thickness: 0.035, depth: 0.018, y: 0.009, color: 0x241f10 }),
-  );
+  group.add(buildEdgeGridMesh(flatCeilingEdges, { thickness: 0.035, depth: 0.018, y: 0.009, color: 0x241f10 }, C));
 
   // ---------- Murs : regroupés par thème + hauteur (InstancedMesh) ----------
   const wallBuckets = {}; // theme -> { v: [[x,z]], h: [[x,z]] }
@@ -456,8 +106,8 @@ export function buildWorld(maze) {
     const { v, h } = wallBuckets[theme];
     const geos = geosFor(cfg.wallHeight);
     const place = (d, [px, pz]) => d.position.set(px, cfg.wallHeight / 2, pz);
-    addChunkedInstances(group, v, geos.v, cfg.wall, place);
-    addChunkedInstances(group, h, geos.h, cfg.wall, place);
+    addChunkedInstances(group, v, geos.v, cfg.wall, place, C);
+    addChunkedInstances(group, h, geos.h, cfg.wall, place, C);
   }
 
   // ---------- Linteaux aux ouvertures des zones "ouvertes" (hôtel, quartier) ----------
@@ -485,8 +135,8 @@ export function buildWorld(maze) {
       if (zy0 + zh - 1 <= size - 2 && !maze.hasWallS(x, zy0 + zh - 1)) lintelHz.push([x * C, (zy0 + zh - 1) * C + C / 2]);
     }
     const lintelPlace = (d, [px, pz]) => d.position.set(px, lintelY, pz);
-    addChunkedInstances(group, lintelV, new THREE.BoxGeometry(WALL_THICKNESS, lintelH, C), cfg.wall, lintelPlace);
-    addChunkedInstances(group, lintelHz, new THREE.BoxGeometry(C, lintelH, WALL_THICKNESS), cfg.wall, lintelPlace);
+    addChunkedInstances(group, lintelV, new THREE.BoxGeometry(WALL_THICKNESS, lintelH, C), cfg.wall, lintelPlace, C);
+    addChunkedInstances(group, lintelHz, new THREE.BoxGeometry(C, lintelH, WALL_THICKNESS), cfg.wall, lintelPlace, C);
   }
 
   // ---------- Plinthes : relief réel au pied des murs (zones intérieures) ----------
@@ -498,8 +148,8 @@ export function buildWorld(maze) {
     const bucket2 = wallBuckets[theme];
     if (!bucket2) continue;
     const mat = new THREE.MeshStandardMaterial({ color: baseboardColors[theme], roughness: 0.85 });
-    addChunkedInstances(group, bucket2.v, baseboardVGeo, mat, baseboardPlace);
-    addChunkedInstances(group, bucket2.h, baseboardHGeo, mat, baseboardPlace);
+    addChunkedInstances(group, bucket2.v, baseboardVGeo, mat, baseboardPlace, C);
+    addChunkedInstances(group, bucket2.h, baseboardHGeo, mat, baseboardPlace, C);
   }
 
   // ---------- Néons plafonniers (uniquement zones "lights: true") ----------
@@ -517,6 +167,7 @@ export function buildWorld(maze) {
       }
     }
   }
+  const dummy = new THREE.Object3D();
   const strips = new THREE.InstancedMesh(stripGeo, makeLightStripMaterial(0xffffff), stripPositions.length);
   strips.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(stripPositions.length * 3), 3);
   const flickerIdx = [];
@@ -653,12 +304,11 @@ export function buildWorld(maze) {
 
   // Joints de pavés en relief au sol de la cour (même technique que les couloirs).
   group.add(
-    buildEdgeGridMesh(collectCellEdges(new Set(['hotel'])), {
-      thickness: 0.035,
-      depth: 0.02,
-      y: 0.011,
-      color: 0x131316,
-    }),
+    buildEdgeGridMesh(
+      collectCellEdges(maze, size, C, new Set(['hotel'])),
+      { thickness: 0.035, depth: 0.02, y: 0.011, color: 0x131316 },
+      C,
+    ),
   );
 
   // ---------- Kitty : miroirs ovals (cadre en relief) accrochés aux murs ----------
