@@ -226,6 +226,7 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
   // pouvoir glisser le long d'un mur au lieu de se bloquer en diagonale.
   function collides(x, z) {
     for (const c of colliders) {
+      if (c.blocked === false) continue; // porte ouverte : son collider est levé
       if (
         x + PLAYER_RADIUS > c.minX &&
         x - PLAYER_RADIUS < c.maxX &&

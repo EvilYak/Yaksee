@@ -276,6 +276,29 @@ export function buildShopWorld() {
   lot.position.set(0, 0, -11);
   group.add(lot);
 
+  // Sol étendu bien au-delà de la zone jouable : sans lui, le parking
+  // s'arrête net à la limite de déplacement et se voit tout de suite comme
+  // un petit plateau flottant plutôt qu'un vrai lieu. Légèrement en
+  // contrebas pour ne pas entrer en conflit avec l'asphalte du parking.
+  const farGround = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.MeshStandardMaterial({ color: 0x10120e, roughness: 1 }));
+  farGround.rotation.x = -Math.PI / 2;
+  farGround.position.set(0, -0.03, -20);
+  group.add(farGround);
+
+  // Route décorative qui prolonge le parking vers l'horizon : hors des
+  // limites de déplacement (bounds côté main.js), donc jamais praticable —
+  // juste de quoi donner une suite au monde plutôt qu'un bord net.
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(7, 45), asphaltMat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(0, 0.005, -42);
+  group.add(road);
+  for (let i = 0; i < 9; i++) {
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 2), lineMat);
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.015, -21 - i * 4);
+    group.add(dash);
+  }
+
   for (let i = -3; i <= 3; i++) {
     const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 4), lineMat);
     stripe.rotation.x = -Math.PI / 2;
@@ -346,6 +369,31 @@ export function buildShopWorld() {
     foliage.position.y = 2.4 + Math.random() * 0.6;
     t.add(foliage);
     t.position.set(-9 + Math.random() * 18, 0, -15.5 - Math.random() * 1.5);
+    group.add(t);
+  }
+
+  // Grands arbres en périphérie (mur sur les côtés + rideau derrière la
+  // route) pour masquer l'horizon et les bords du monde plutôt que de les
+  // laisser à nu — bien plus imposants que ceux du fond de parking.
+  for (let i = 0; i < 16; i++) {
+    const t = new THREE.Group();
+    const trunkH = 2.2 + Math.random() * 1.4;
+    const trunk = limb(0.16, 0.22, trunkH, treeBarkMat, 6);
+    trunk.position.y = trunkH / 2;
+    t.add(trunk);
+    const foliageR = 1.7 + Math.random() * 1.1;
+    const foliage = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageR, 0), treeFoliageMat);
+    foliage.position.y = trunkH + foliageR * 0.6;
+    t.add(foliage);
+    let x, z;
+    if (i < 8) {
+      x = (i % 2 === 0 ? -1 : 1) * (12 + Math.random() * 4);
+      z = -4 - Math.random() * 20;
+    } else {
+      x = -16 + Math.random() * 32;
+      z = -45 - Math.random() * 15;
+    }
+    t.position.set(x, 0, z);
     group.add(t);
   }
 
@@ -548,7 +596,7 @@ export function buildShopWorld() {
   phoneHandset.rotation.z = Math.PI / 2;
   phoneHandset.position.set(4.35, 0.95 + 0.09, -0.88);
   group.add(phoneHandset);
-  const phonePoint = { x: 4.35, z: -0.9, radius: 1.1 };
+  const phonePoint = { x: 4.35, z: -0.9, radius: 0.8 };
 
   // Client en attente près de l'entrée : personnage bas-poly (character.js),
   // visage encore un espace réservé — voir buildCharacterBody pour poser une
@@ -582,14 +630,20 @@ export function buildShopWorld() {
   // Poubelle : jette 1 unité d'un objet en stock (comptoir déjà surchargé,
   // zone volontairement loin des autres points d'interaction).
   const trashCan = buildTrashCan(metalMat);
-  trashCan.position.set(-3.5, 0, 1.0);
+  // Près du comptoir (juste au nord du poste de caisse), pas planquée à
+  // l'autre bout de la pièce — un rayon assez petit pour ne chevaucher ni
+  // la caisse ni le téléphone, déjà bien remplis dans ce coin.
+  trashCan.position.set(3.0, 0, 0.8);
   group.add(trashCan);
-  colliders.push({ minX: -3.68, maxX: -3.32, minZ: 0.82, maxZ: 1.18 });
-  const trashPoint = { x: -3.5, z: 1.0, radius: 1.0 };
+  colliders.push({ minX: 2.8, maxX: 3.2, minZ: 0.6, maxZ: 1.0 });
+  const trashPoint = { x: 3.0, z: 0.8, radius: 0.7 };
 
-  // Porte des WC : coulisse à l'approche (voir doors.js) — plus une simple
-  // façade plaquée devant un mur plein, elle ferme/ouvre réellement la
-  // brèche découpée dans le mur gauche.
+  // Porte des WC : fermée par défaut (son propre collider bloque le
+  // passage), s'ouvre/se ferme sur E — plus une simple façade plaquée
+  // devant un mur plein, ni une porte qui coulisse toute seule à l'approche
+  // (personne n'a demandé ça).
+  const wcDoorCollider = { minX: rx0 - WALL_T / 2, maxX: rx0 + WALL_T / 2, minZ: wcDoorZ - WC_DOOR_W / 2, maxZ: wcDoorZ + WC_DOOR_W / 2 };
+  colliders.push(wcDoorCollider);
   const wcDoorCtrl = createSlidingDoor({
     material: bathDoorMat,
     width: WC_DOOR_W,
@@ -597,8 +651,10 @@ export function buildShopWorld() {
     x: rx0,
     gapCenterZ: wcDoorZ,
     openTowardPositiveZ: true,
+    collider: wcDoorCollider,
   });
   group.add(wcDoorCtrl.mesh);
+  const wcDoorPoint = { x: rx0 + 1.1, z: wcDoorZ, radius: 0.8 };
 
   // ---------- Arrière-boutique (x 5..10, z -2..2) ----------
   const bx0 = rx1, bx1 = rx1 + 5, bz0 = -2, bz1 = 2;
@@ -655,8 +711,11 @@ export function buildShopWorld() {
     group.add(prop);
   });
 
-  // Porte STAFF ONLY entre les deux salles : coulisse à l'approche au lieu
-  // de rester un panneau statique qu'on traversait sans qu'il ne bouge.
+  // Porte STAFF ONLY entre les deux salles : fermée par défaut (bloque
+  // vraiment le passage), s'ouvre/se ferme sur E — pas un panneau statique
+  // qu'on traversait sans qu'il bouge, ni une porte automatique.
+  const staffDoorCollider = { minX: bx0 - WALL_T / 2, maxX: bx0 + WALL_T / 2, minZ: -DOOR_W / 2, maxZ: DOOR_W / 2 };
+  colliders.push(staffDoorCollider);
   const staffDoorCtrl = createSlidingDoor({
     material: staffDoorMat,
     width: DOOR_W - 0.1,
@@ -664,8 +723,13 @@ export function buildShopWorld() {
     x: bx0,
     gapCenterZ: 0,
     openTowardPositiveZ: false,
+    collider: staffDoorCollider,
   });
   group.add(staffDoorCtrl.mesh);
+  // Centré sur la brèche elle-même (pas juste "à côté") : sans ça, on peut
+  // interagir avec la porte depuis un endroit d'où on ne peut pas vraiment
+  // la franchir.
+  const staffDoorPoint = { x: bx0, z: 0, radius: 0.85 };
 
   // Placard de ménage (balai + débouche-chiotte), dans le fond de
   // l'arrière-boutique déjà réservée au personnel — assez loin du mur
@@ -707,6 +771,8 @@ export function buildShopWorld() {
     trashPoint,
     closetPoint,
     signPoint,
+    staffDoorPoint,
+    wcDoorPoint,
     npc,
     frames,
     shelfSlots,

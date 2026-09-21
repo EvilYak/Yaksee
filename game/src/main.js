@@ -212,6 +212,8 @@ function handleInteractPress() {
   else if (target === 'register') registerPanel.open();
   else if (target === 'trash') trashPanel.open();
   else if (target === 'closet') closetPanel.open();
+  else if (target === 'staffDoor') shop.doors[0].toggle();
+  else if (target === 'wcDoor') shop.doors[1].toggle();
 }
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') handleInteractPress();
@@ -231,7 +233,15 @@ startBtn.addEventListener('click', () => {
   }
 });
 
-const INTERACT_LABELS = { sign: 'Enseigne', phone: 'Téléphone', register: 'Caisse', trash: 'Poubelle', closet: 'Placard' };
+const INTERACT_LABELS = {
+  sign: 'Enseigne',
+  phone: 'Téléphone',
+  register: 'Caisse',
+  trash: 'Poubelle',
+  closet: 'Placard',
+  staffDoor: 'Porte',
+  wcDoor: 'Porte des WC',
+};
 const npcHeadWorldPos = new THREE.Vector3();
 const npcHeadScreenPos = new THREE.Vector3();
 
@@ -252,6 +262,10 @@ function nearestTarget(p) {
   if (dTrash < shop.trashPoint.radius) return 'trash';
   const dCloset = Math.hypot(p.x - shop.closetPoint.x, p.z - shop.closetPoint.z);
   if (dCloset < shop.closetPoint.radius) return 'closet';
+  const dStaffDoor = Math.hypot(p.x - shop.staffDoorPoint.x, p.z - shop.staffDoorPoint.z);
+  if (dStaffDoor < shop.staffDoorPoint.radius) return 'staffDoor';
+  const dWcDoor = Math.hypot(p.x - shop.wcDoorPoint.x, p.z - shop.wcDoorPoint.z);
+  if (dWcDoor < shop.wcDoorPoint.radius) return 'wcDoor';
   return null;
 }
 
@@ -303,7 +317,7 @@ function tick() {
     }
 
     toolRuntime.updateProjectiles(dt);
-    shop.doors.forEach((door) => door.update(dt, controls.position));
+    shop.doors.forEach((door) => door.update(dt));
 
     shop.npc.group.visible = !!customers.current;
     customerMovement.update(dt, customers.current);
