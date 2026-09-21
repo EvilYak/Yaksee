@@ -519,7 +519,15 @@ html, body {
 #shift-end-title {
   font-size: 16px;
   letter-spacing: 3px;
-  margin-bottom: 18px;
+  margin-bottom: 6px;
+}
+
+#shift-end-subtitle {
+  font-size: 12px;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  font-style: italic;
+  margin-bottom: 16px;
 }
 
 #shift-end-stats {
@@ -612,6 +620,54 @@ html, body {
 }
 
 #fade-overlay.visible {
+  opacity: 1;
+}
+
+/* ---------- Effets d'horreur (glitch, message flash) ---------- */
+
+#glitch-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 36;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0px, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 3px),
+    rgba(120, 10, 10, 0.18);
+  mix-blend-mode: overlay;
+}
+
+#glitch-overlay.visible {
+  opacity: 1;
+  animation: glitch-jitter 0.08s steps(2) infinite;
+}
+
+@keyframes glitch-jitter {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
+  100% { transform: translateX(-3px); }
+}
+
+#horror-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 37;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10vh 10vw;
+  text-align: center;
+  background: rgba(4, 2, 2, 0.82);
+  color: #ff2a2a;
+  font-size: clamp(18px, 4vw, 30px);
+  letter-spacing: 3px;
+  text-shadow: 0 0 14px rgba(255, 0, 0, 0.85);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.06s linear;
+}
+
+#horror-flash.visible {
   opacity: 1;
 }
 

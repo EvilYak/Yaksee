@@ -41,6 +41,18 @@ export function createAudio() {
     droneFilter.connect(droneGain);
     droneGain.connect(master);
     drone.start();
+
+    // Sous-harmonique légèrement désaccordée, en dessous du seuil conscient :
+    // c'est elle qui donne l'impression que "quelque chose ne va pas" sans
+    // qu'on puisse dire pourquoi.
+    const undertone = ctx.createOscillator();
+    undertone.type = 'sine';
+    undertone.frequency.value = 61;
+    const undertoneGain = ctx.createGain();
+    undertoneGain.gain.value = 0.014;
+    undertone.connect(undertoneGain);
+    undertoneGain.connect(master);
+    undertone.start();
   }
 
   function footstep(surface, sprinting) {
@@ -177,5 +189,48 @@ export function createAudio() {
     osc.stop(t + 0.15);
   }
 
-  return { start, footstep, doorChime, registerBeep, sweep, plunge, thud };
+  // Salve de bruit filtré façon parasite radio/télé — coupure de lumière,
+  // appel qui dérape.
+  function staticBurst() {
+    if (!started || !ctx) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.3, ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 1500;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    src.start(t);
+    src.stop(t + 0.3);
+  }
+
+  // Grondement grave qui descend et s'éteint lentement — accompagne une
+  // apparition ou un message qui s'affiche.
+  function dreadSting() {
+    if (!started || !ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(60, t);
+    osc.frequency.exponentialRampToValueAtTime(28, t + 1.4);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(0.26, t + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    osc.start(t);
+    osc.stop(t + 1.55);
+  }
+
+  return { start, footstep, doorChime, registerBeep, sweep, plunge, thud, staticBurst, dreadSting };
 }

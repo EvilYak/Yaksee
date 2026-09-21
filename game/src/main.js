@@ -17,6 +17,7 @@ import { createToolRuntime } from './toolRuntime.js';
 import { createShiftEndScreen } from './shiftEnd.js';
 import { createShiftStart } from './shiftStart.js';
 import { createCustomerMovement } from './customerMovement.js';
+import { createHorrorDirector } from './horror.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -39,9 +40,12 @@ renderer.shadowMap.enabled = false;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 80);
 
-const NIGHT_SKY = 0x0b1220;
+const NIGHT_SKY = 0x070c16;
 scene.background = new THREE.Color(NIGHT_SKY);
-scene.fog = new THREE.Fog(NIGHT_SKY, 16, 42);
+// Brouillard resserré (avant : 16-42) : une boutique de nuit qui se referme
+// vite sur elle-même donne davantage l'impression d'être seul avec autre
+// chose, plutôt qu'un simple choix de rendu lointain.
+scene.fog = new THREE.Fog(NIGHT_SKY, 11, 34);
 
 const shop = buildShopWorld();
 scene.add(shop.group);
@@ -82,8 +86,9 @@ window.addEventListener('keydown', (e) => {
 // de base, une scène de nuit rendue en PBR (MeshStandardMaterial) tombe à
 // un noir quasi total dès qu'on s'éloigne des points lumineux — un vrai
 // parking de nuit reste éclairé par le ciel + l'enseigne + les lampadaires.
-scene.add(new THREE.HemisphereLight(0x5a72a8, 0x2a2418, 1.1));
-const moon = new THREE.DirectionalLight(0x9fb0d8, 0.7);
+const ambientLight = new THREE.HemisphereLight(0x5a72a8, 0x2a2418, 0.95);
+scene.add(ambientLight);
+const moon = new THREE.DirectionalLight(0x9fb0d8, 0.55);
 moon.position.set(-6, 14, -6);
 scene.add(moon);
 
@@ -155,6 +160,7 @@ const customerMovement = createCustomerMovement({
   shelfSlots: shop.shelfSlots,
   waitSpot: { x: shop.npc.position.x, z: shop.npc.position.z },
 });
+const horror = createHorrorDirector({ scene, camera, shift, dialogue, audio, flashlight, ambientLight });
 
 // ---------- Téléphone / PNJ : dialogues ----------
 const interactHint = document.getElementById('interact-hint');
@@ -288,9 +294,11 @@ function tick() {
     if (shiftStart.started && !shift.ended) {
       shift.update(dt);
       customers.update(dt);
+      horror.update(dt);
     }
     if (shift.ended && !shiftEndShown) {
       shiftEndShown = true;
+      horror.endShift();
       shiftEndScreen.show();
     }
 
