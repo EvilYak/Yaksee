@@ -2,43 +2,51 @@ import * as THREE from 'three';
 import { makeCanvas, addNoise, grungeTint, stain } from './noise.js';
 import { toTexture, toBumpTexture, enableUvVariation } from './texture-utils.js';
 
-// Le motif "papier peint" reconnaissable des Backrooms Level 0 : une ogive
-// verticale élancée (largeur << hauteur, pas un "nœud papillon" horizontal)
-// répétée en quinconce comme un vrai papier peint imprimé, pas juste du
-// bruit — c'est ce qui manquait pour que le mur soit identifiable au premier
-// coup d'œil au lieu de lire comme une tache informe.
-function drawOgiveMotif(ctx, cx, cy, w, h) {
+// Le motif "papier peint" reconnaissable des Backrooms Level 0 : un chevron
+// plein pointant vers le haut, empilé en colonnes régulières séparées par un
+// filet pointillé — pas juste du bruit, et pas une forme inventée : c'est le
+// motif du vrai papier peint 70s qu'on retrouve sur les photos de référence.
+function drawChevron(ctx, cx, cy, w, h) {
+  const stroke = w * 0.24;
   ctx.beginPath();
-  ctx.moveTo(cx, cy - h);
-  ctx.quadraticCurveTo(cx + w, cy - h * 0.32, cx, cy);
-  ctx.quadraticCurveTo(cx - w, cy - h * 0.32, cx, cy - h);
+  ctx.moveTo(cx - w / 2, cy + h / 2);
+  ctx.lineTo(cx, cy - h / 2);
+  ctx.lineTo(cx + w / 2, cy + h / 2);
+  ctx.lineTo(cx + w / 2 - stroke, cy + h / 2);
+  ctx.lineTo(cx, cy - h / 2 + stroke * 1.3);
+  ctx.lineTo(cx - w / 2 + stroke, cy + h / 2);
   ctx.closePath();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + h);
-  ctx.quadraticCurveTo(cx + w, cy + h * 0.32, cx, cy);
-  ctx.quadraticCurveTo(cx - w, cy + h * 0.32, cx, cy + h);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(cx, cy, w * 0.22, 0, Math.PI * 2);
   ctx.fill();
 }
 
-function drawWallpaperPattern(ctx, size, { cols, rows, color, alpha, lineWidth }) {
-  const cellW = size / cols;
-  const cellH = size / rows;
+function drawWallpaperPattern(ctx, size, { cols, rows, color, alpha }) {
+  const colW = size / cols;
+  const rowH = size / rows;
+  ctx.save();
+  ctx.fillStyle = `rgba(${color},${alpha})`;
+  for (let c = 0; c < cols; c++) {
+    const cx = c * colW + colW / 2;
+    for (let r = -1; r <= rows; r++) {
+      const cy = r * rowH + rowH / 2;
+      drawChevron(ctx, cx, cy, colW * 0.62, rowH * 0.62);
+    }
+  }
+  ctx.restore();
+}
+
+// Filet pointillé au centre de chaque colonne (couture de lé de papier peint).
+function drawColumnDashes(ctx, size, cols, color, alpha) {
+  const colW = size / cols;
   ctx.save();
   ctx.strokeStyle = `rgba(${color},${alpha})`;
-  ctx.fillStyle = `rgba(${color},${alpha})`;
-  ctx.lineWidth = lineWidth;
-  for (let ry = -1; ry <= rows; ry++) {
-    const offsetX = ry % 2 === 0 ? 0 : cellW / 2;
-    for (let rx = -1; rx <= cols; rx++) {
-      const cx = rx * cellW + cellW / 2 + offsetX;
-      const cy = ry * cellH + cellH / 2;
-      drawOgiveMotif(ctx, cx, cy, cellW * 0.22, cellH * 0.44);
-    }
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 5]);
+  for (let c = 0; c < cols; c++) {
+    const x = c * colW + colW / 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, size);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -51,29 +59,32 @@ export function makeWallpaperMaterial() {
   ctx.fillStyle = '#b7a24a';
   ctx.fillRect(0, 0, size, size);
 
+  // Bandes verticales alternées (lés de rouleau de papier peint) avant le motif.
+  const bandCols = 5;
+  const bandW = size / bandCols;
+  for (let c = 0; c < bandCols; c++) {
+    ctx.fillStyle = c % 2 === 0 ? 'rgba(0,0,0,0.045)' : 'rgba(255,255,255,0.035)';
+    ctx.fillRect(c * bandW, 0, bandW, size);
+  }
+  drawColumnDashes(ctx, size, bandCols, '70,60,25', 0.35);
+
   // Motif imprimé avant le vieillissement (taches/bruit par-dessus, comme un
   // vrai papier peint qui se salit après avoir été posé). Deux passes légèrement
   // décalées façon gaufrage : un trait clair en haut-gauche, un trait sombre en
   // bas-droite du même motif, pour un léger relief avant même le bump map.
   ctx.save();
-  ctx.translate(-1, -1);
-  drawWallpaperPattern(ctx, size, { cols: 10, rows: 8, color: '206,190,130', alpha: 0.22, lineWidth: 1.6 });
+  ctx.translate(-1.5, -1.5);
+  drawWallpaperPattern(ctx, size, { cols: bandCols, rows: 4, color: '212,196,138', alpha: 0.4 });
   ctx.restore();
   ctx.save();
-  ctx.translate(1, 1);
-  drawWallpaperPattern(ctx, size, { cols: 10, rows: 8, color: '80,66,28', alpha: 0.38, lineWidth: 1.6 });
+  ctx.translate(1.5, 1.5);
+  drawWallpaperPattern(ctx, size, { cols: bandCols, rows: 4, color: '82,68,28', alpha: 0.6 });
   ctx.restore();
 
   // Décoloration inégale à grande échelle (jamais deux zones du mur de la
   // même teinte exacte, comme un vrai papier peint vieilli).
   grungeTint(ctx, size, { color: [92, 78, 32], strength: 0.35, cells: 3, octaves: 3 });
   grungeTint(ctx, size, { color: [140, 128, 90], strength: 0.18, cells: 5, octaves: 2 });
-
-  // Légère variation verticale (bandes de papier peint / lés).
-  for (let x = 0; x < size; x += 64) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
-    ctx.fillRect(x, 0, 64, size);
-  }
 
   // Taches d'humidité, du diffus au franc.
   for (let i = 0; i < 10; i++) {

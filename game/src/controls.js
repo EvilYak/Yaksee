@@ -29,6 +29,23 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   let bobPhase = 0;
   let bobLast = 0;
 
+  // Réglages regard : multiplicateur de sensibilité + inversion de l'axe Y,
+  // partagés par tous les modes de visée (souris, tactile, manette) au lieu
+  // de n'en couvrir qu'un seul.
+  let sensitivity = 1;
+  let invertY = 1;
+  function setSensitivity(mult) {
+    sensitivity = mult;
+  }
+  function setInvertY(enabled) {
+    invertY = enabled ? -1 : 1;
+  }
+  function applyLook(dYaw, dPitch) {
+    yaw -= dYaw * sensitivity;
+    pitch -= dPitch * sensitivity * invertY;
+    pitch = Math.max(-1.3, Math.min(1.3, pitch));
+  }
+
   const moveVec = { x: 0, y: 0 }; // x = strafe, y = avant/arrière, -1..1
   let joyMagnitude = 0; // 0..1, à quel point le joystick est poussé
   const keys = new Set();
@@ -98,9 +115,7 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     const dy = e.clientY - lastLookY;
     lastLookX = e.clientX;
     lastLookY = e.clientY;
-    yaw -= dx * TOUCH_SENS;
-    pitch -= dy * TOUCH_SENS;
-    pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    applyLook(dx * TOUCH_SENS, dy * TOUCH_SENS);
   });
   function endLook(e) {
     if (e.pointerId !== lookPointerId) return;
@@ -149,13 +164,9 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     if (!isDesktop()) return;
     const locked = document.pointerLockElement === app;
     if (locked) {
-      yaw -= e.movementX * MOUSE_SENS;
-      pitch -= e.movementY * MOUSE_SENS;
-      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+      applyLook(e.movementX * MOUSE_SENS, e.movementY * MOUSE_SENS);
     } else if (!pointerLockSupported && mouseDown) {
-      yaw -= e.movementX * DRAG_SENS;
-      pitch -= e.movementY * DRAG_SENS;
-      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+      applyLook(e.movementX * DRAG_SENS, e.movementY * DRAG_SENS);
     }
   });
   window.addEventListener('keydown', (e) => keys.add(e.code));
@@ -223,9 +234,7 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     const gp = pollGamepad();
 
     if (gp.lookX || gp.lookY) {
-      yaw -= gp.lookX * GAMEPAD_LOOK_SPEED * dt;
-      pitch -= gp.lookY * GAMEPAD_LOOK_SPEED * dt;
-      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+      applyLook(gp.lookX * GAMEPAD_LOOK_SPEED * dt, gp.lookY * GAMEPAD_LOOK_SPEED * dt);
     }
 
     const inX = THREE.MathUtils.clamp(moveVec.x + kb.x + gp.x, -1, 1);
@@ -277,5 +286,5 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
     return { moving: speedScale > 0.05, sprinting, position };
   }
 
-  return { update, position };
+  return { update, position, setSensitivity, setInvertY };
 }
