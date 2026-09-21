@@ -503,7 +503,10 @@ export function buildWorld(maze) {
   }
 
   // ---------- Néons plafonniers (uniquement zones "lights: true") ----------
-  const stripGeo = new THREE.PlaneGeometry(1.7, 0.22);
+  // Un vrai panneau fluorescent encastré (large, presque carré), pas une fine
+  // barrette : c'est ce qui se reconnaît immédiatement au plafond, pas juste
+  // un filet de lumière qu'il faut chercher.
+  const stripGeo = new THREE.PlaneGeometry(1.6, 0.85);
   const stripPositions = [];
   for (let x = 0; x < size; x++) {
     for (let y = 0; y < size; y++) {
@@ -547,7 +550,7 @@ export function buildWorld(maze) {
   // plafond (plus loin du joueur que le plan lumineux) pour ne former qu'un
   // liseré sombre visible autour du néon, sans jamais le recouvrir.
   if (stripPositions.length) {
-    const housingGeo = new THREE.BoxGeometry(1.94, 0.06, 0.46);
+    const housingGeo = new THREE.BoxGeometry(1.84, 0.06, 1.05);
     const housingMat = new THREE.MeshStandardMaterial({ color: 0x2b2b28, roughness: 0.7 });
     const housing = new THREE.InstancedMesh(housingGeo, housingMat, stripPositions.length);
     stripPositions.forEach(([px, pz, rotated], i) => {
@@ -568,7 +571,7 @@ export function buildWorld(maze) {
   // les murs et le décor proches d'un néon soient visiblement mieux éclairés
   // que ceux qui n'en ont pas — l'effet se voit, pas juste le plan lumineux.
   const NEON_LIGHT_POOL = 6;
-  const NEON_LIGHT_RADIUS = 6.5;
+  const NEON_LIGHT_RADIUS = 8;
   const neonLightPool = [];
   for (let i = 0; i < NEON_LIGHT_POOL; i++) {
     const light = new THREE.PointLight(0xffffff, 0, NEON_LIGHT_RADIUS - 1.5, 2);
@@ -675,7 +678,10 @@ export function buildWorld(maze) {
   }
 
   // ---------- Lumières réelles : ambiance globale + lampe du joueur (togglable) ----------
-  const hemi = new THREE.HemisphereLight(0xfff3d0, 0x2a2410, 2.6);
+  // Les Backrooms sont éclairées par des néons de bureau toujours allumés,
+  // pas par une lampe de poche dans le noir : l'ambiance doit rester assez
+  // claire pour lire le papier peint sans avoir à coller la lampe dessus.
+  const hemi = new THREE.HemisphereLight(0xfff3d0, 0x453c1e, 3.1);
   group.add(hemi);
 
   const followLight = new THREE.PointLight(0xfff2cc, 24, 10, 2);
@@ -737,7 +743,7 @@ export function buildWorld(maze) {
         light.position.set(px, WALL_HEIGHT - 0.5, pz);
         light.color.copy(tint);
         const falloff = Math.max(0, 1 - Math.sqrt(d2) / NEON_LIGHT_RADIUS);
-        light.intensity = 3.4 * falloff;
+        light.intensity = 6 * falloff;
       }
     }
 

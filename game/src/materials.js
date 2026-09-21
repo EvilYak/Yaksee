@@ -150,6 +150,48 @@ function enableUvVariation(material, { flip = true } = {}) {
   return material;
 }
 
+// Le motif "papier peint" reconnaissable des Backrooms : une ogive/feuille
+// stylisée répétée en quinconce (comme un vrai papier peint imprimé), pas
+// juste du bruit — c'est ce qui manquait pour que le mur soit identifiable
+// au premier coup d'œil au lieu de lire comme une tache informe.
+// Ogive verticale élancée (largeur << hauteur), comme la vraie ogive du
+// papier peint des Backrooms Level 0 — pas un "nœud papillon" horizontal.
+function drawOgiveMotif(ctx, cx, cy, w, h) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h);
+  ctx.quadraticCurveTo(cx + w, cy - h * 0.32, cx, cy);
+  ctx.quadraticCurveTo(cx - w, cy - h * 0.32, cx, cy - h);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + h);
+  ctx.quadraticCurveTo(cx + w, cy + h * 0.32, cx, cy);
+  ctx.quadraticCurveTo(cx - w, cy + h * 0.32, cx, cy + h);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, w * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawWallpaperPattern(ctx, size, { cols, rows, color, alpha, lineWidth }) {
+  const cellW = size / cols;
+  const cellH = size / rows;
+  ctx.save();
+  ctx.strokeStyle = `rgba(${color},${alpha})`;
+  ctx.fillStyle = `rgba(${color},${alpha})`;
+  ctx.lineWidth = lineWidth;
+  for (let ry = -1; ry <= rows; ry++) {
+    const offsetX = ry % 2 === 0 ? 0 : cellW / 2;
+    for (let rx = -1; rx <= cols; rx++) {
+      const cx = rx * cellW + cellW / 2 + offsetX;
+      const cy = ry * cellH + cellH / 2;
+      drawOgiveMotif(ctx, cx, cy, cellW * 0.22, cellH * 0.44);
+    }
+  }
+  ctx.restore();
+}
+
 export function makeWallpaperMaterial() {
   const size = 512;
   const canvas = makeCanvas(size);
@@ -157,6 +199,19 @@ export function makeWallpaperMaterial() {
 
   ctx.fillStyle = '#b7a24a';
   ctx.fillRect(0, 0, size, size);
+
+  // Motif imprimé avant le vieillissement (taches/bruit par-dessus, comme un
+  // vrai papier peint qui se salit après avoir été posé). Deux passes légèrement
+  // décalées façon gaufrage : un trait clair en haut-gauche, un trait sombre en
+  // bas-droite du même motif, pour un léger relief avant même le bump map.
+  ctx.save();
+  ctx.translate(-1, -1);
+  drawWallpaperPattern(ctx, size, { cols: 10, rows: 8, color: '206,190,130', alpha: 0.22, lineWidth: 1.6 });
+  ctx.restore();
+  ctx.save();
+  ctx.translate(1, 1);
+  drawWallpaperPattern(ctx, size, { cols: 10, rows: 8, color: '80,66,28', alpha: 0.38, lineWidth: 1.6 });
+  ctx.restore();
 
   // Décoloration inégale à grande échelle (jamais deux zones du mur de la
   // même teinte exacte, comme un vrai papier peint vieilli).
@@ -473,8 +528,15 @@ export function makeCourtyardFloorMaterial() {
 // Quartier pavillonnaire : mur-ciel peint (nuages), pelouse + allée, stuc.
 // ---------------------------------------------------------------------------
 export function makeSkyCloudsMaterial() {
-  const w = 1024;
-  const h = 512;
+  // Le pan de mur physique est étroit et haut (3.2 m de large pour 6.8 m de
+  // haut), alors qu'un canvas "paysage" classique est large et bas : avec un
+  // repeat(1,1), le mapping UV écrase l'image dans l'autre sens — les nuages,
+  // dessinés espacés sur toute la largeur d'un canvas large, se retrouvaient
+  // tous compressés dans la largeur étroite du mur et se touchaient. Le canvas
+  // est donc "portrait" ici, au même ratio que le pan de mur, pour que les
+  // nuages gardent leurs proportions et leur espacement une fois posés.
+  const w = 384;
+  const h = 816;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -497,8 +559,13 @@ export function makeSkyCloudsMaterial() {
       ctx.fill();
     });
   }
-  for (let i = 0; i < 9; i++) {
-    cloud(Math.random() * w, h * (0.12 + Math.random() * 0.4), 34 + Math.random() * 40);
+  // Peu de nuages, bien espacés sur la hauteur du pan : mieux vaut 4 nuages
+  // clairement détachés qu'une nappe blanche continue.
+  const rows = 4;
+  for (let i = 0; i < rows; i++) {
+    const cy = (h / rows) * (i + 0.5) + (Math.random() - 0.5) * (h / rows) * 0.4;
+    const cx = w * (0.3 + Math.random() * 0.4);
+    cloud(cx, cy, 30 + Math.random() * 20);
   }
   const map = new THREE.CanvasTexture(canvas);
   map.colorSpace = THREE.SRGBColorSpace;
@@ -578,18 +645,27 @@ export function makeKittyWallpaperMaterial() {
   ctx.fillStyle = '#e9a9c6';
   ctx.fillRect(0, 0, size, size);
 
-  for (let i = 0; i < 26; i++) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = 2;
-    const cx = Math.random() * size;
-    const cy = Math.random() * size;
-    const r = 16 + Math.random() * 20;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, r, r * 1.4, Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.stroke();
+  // Des bulles alignées en quinconce, toutes de même taille et même
+  // orientation : un vrai motif de papier peint répétitif, pas un nuage de
+  // formes posées au hasard qui se chevauchent ("bordélique").
+  const cols = 5;
+  const rows = 4;
+  const cellW = size / cols;
+  const cellH = size / rows;
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 2;
+  for (let ry = -1; ry <= rows; ry++) {
+    const offsetX = ry % 2 === 0 ? 0 : cellW / 2;
+    for (let rx = -1; rx <= cols; rx++) {
+      const cx = rx * cellW + cellW / 2 + offsetX;
+      const cy = ry * cellH + cellH / 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, cellW * 0.22, cellH * 0.32, Math.PI / 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
-  for (let i = 0; i < 8; i++) {
-    stain(ctx, size, Math.random() * size, Math.random() * size, 40 + Math.random() * 60, '255,255,255', 0.08);
+  for (let i = 0; i < 6; i++) {
+    stain(ctx, size, Math.random() * size, Math.random() * size, 40 + Math.random() * 60, '255,255,255', 0.06);
   }
   addNoise(ctx, size, 8);
 
