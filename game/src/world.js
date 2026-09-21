@@ -32,7 +32,7 @@ function buildThemeConfig() {
       wall: [makeWallpaperMaterial(), makeWallpaperMaterial(), makeWallpaperMaterial()],
       floor: makeCarpetMaterial(),
       ceiling: makeCeilingMaterial(),
-      lightColor: new THREE.Color(0xfff6d8),
+      lightColor: new THREE.Color(0xffffff),
       fog: new THREE.Color(0x8c8256),
       fogDensity: 0.055,
       wallHeight: DEFAULT_WALL_HEIGHT,
@@ -304,11 +304,35 @@ export function buildWorld(maze) {
     return material[Math.abs(h) % material.length];
   }
 
+  // Hash déterministe (position -> [0,1)) pour tirer un décalage UV stable
+  // par instance : même bâtiment reconstruit = même décalage, pas de
+  // scintillement d'une frame à l'autre ni d'une partie à l'autre.
+  function hash01(x, y, salt) {
+    const s = Math.sin(x * 127.1 + y * 311.7 + salt * 269.5) * 43758.5453123;
+    return s - Math.floor(s);
+  }
+
   function addChunkedInstances(targetGroup, list, geometry, material, placeFn) {
     if (!list.length) return;
     groupByChunk(list).forEach((entries, key) => {
       const mat = pickVariant(material, key);
-      const mesh = new THREE.InstancedMesh(geometry, mat, entries.length);
+      const uvVariation = !!(mat && mat.userData && mat.userData.uvVariation);
+      // Les attributs instanciés vivent sur la géométrie : elle est partagée
+      // entre tous les chunks/thèmes (voir geosFor), donc on la clone dès
+      // qu'on doit y poser un attribut propre à ce chunk précis.
+      const geo = uvVariation ? geometry.clone() : geometry;
+      const mesh = new THREE.InstancedMesh(geo, mat, entries.length);
+      if (uvVariation) {
+        const offsets = new Float32Array(entries.length * 2);
+        const flips = new Float32Array(entries.length);
+        entries.forEach(([px, pz], i) => {
+          offsets[i * 2] = hash01(px, pz, 1.3);
+          offsets[i * 2 + 1] = hash01(px, pz, 7.9);
+          flips[i] = hash01(px, pz, 4.1) > 0.5 ? 1 : 0;
+        });
+        geo.setAttribute('instanceUvOffset', new THREE.InstancedBufferAttribute(offsets, 2));
+        geo.setAttribute('instanceUvFlip', new THREE.InstancedBufferAttribute(flips, 1));
+      }
       entries.forEach((entry, i) => {
         placeFn(dummy, entry);
         dummy.updateMatrix();
@@ -450,32 +474,19 @@ export function buildWorld(maze) {
     if (cfg.wallHeight <= doorHeight) continue;
     const lintelH = cfg.wallHeight - doorHeight;
     const lintelY = doorHeight + lintelH / 2;
-    const vGeo = new THREE.BoxGeometry(WALL_THICKNESS, lintelH, C);
-    const hGeo = new THREE.BoxGeometry(C, lintelH, WALL_THICKNESS);
+    const lintelV = [];
+    const lintelHz = [];
     for (let y = zy0; y < zy0 + zh; y++) {
-      if (zx0 - 1 >= 0 && !maze.hasWallE(zx0 - 1, y)) {
-        const m = new THREE.Mesh(vGeo, cfg.wall);
-        m.position.set((zx0 - 1) * C + C / 2, lintelY, y * C);
-        group.add(m);
-      }
-      if (zx0 + zw - 1 <= size - 2 && !maze.hasWallE(zx0 + zw - 1, y)) {
-        const m = new THREE.Mesh(vGeo, cfg.wall);
-        m.position.set((zx0 + zw - 1) * C + C / 2, lintelY, y * C);
-        group.add(m);
-      }
+      if (zx0 - 1 >= 0 && !maze.hasWallE(zx0 - 1, y)) lintelV.push([(zx0 - 1) * C + C / 2, y * C]);
+      if (zx0 + zw - 1 <= size - 2 && !maze.hasWallE(zx0 + zw - 1, y)) lintelV.push([(zx0 + zw - 1) * C + C / 2, y * C]);
     }
     for (let x = zx0; x < zx0 + zw; x++) {
-      if (zy0 - 1 >= 0 && !maze.hasWallS(x, zy0 - 1)) {
-        const m = new THREE.Mesh(hGeo, cfg.wall);
-        m.position.set(x * C, lintelY, (zy0 - 1) * C + C / 2);
-        group.add(m);
-      }
-      if (zy0 + zh - 1 <= size - 2 && !maze.hasWallS(x, zy0 + zh - 1)) {
-        const m = new THREE.Mesh(hGeo, cfg.wall);
-        m.position.set(x * C, lintelY, (zy0 + zh - 1) * C + C / 2);
-        group.add(m);
-      }
+      if (zy0 - 1 >= 0 && !maze.hasWallS(x, zy0 - 1)) lintelHz.push([x * C, (zy0 - 1) * C + C / 2]);
+      if (zy0 + zh - 1 <= size - 2 && !maze.hasWallS(x, zy0 + zh - 1)) lintelHz.push([x * C, (zy0 + zh - 1) * C + C / 2]);
     }
+    const lintelPlace = (d, [px, pz]) => d.position.set(px, lintelY, pz);
+    addChunkedInstances(group, lintelV, new THREE.BoxGeometry(WALL_THICKNESS, lintelH, C), cfg.wall, lintelPlace);
+    addChunkedInstances(group, lintelHz, new THREE.BoxGeometry(C, lintelH, WALL_THICKNESS), cfg.wall, lintelPlace);
   }
 
   // ---------- Plinthes : relief réel au pied des murs (zones intérieures) ----------
@@ -547,6 +558,22 @@ export function buildWorld(maze) {
     });
     housing.instanceMatrix.needsUpdate = true;
     group.add(housing);
+  }
+
+  // Les néons ne sont qu'un plan émissif : sans vraie lumière, ils n'éclairent
+  // rien autour d'eux et le mur en dessous reste à la teinte ambiante globale,
+  // toujours la même. Des centaines de PointLight réels (un par néon) ne sont
+  // pas soutenables ; on fait tourner un petit pool de lumières réelles sur
+  // les quelques néons les plus proches du joueur à chaque frame, pour que
+  // les murs et le décor proches d'un néon soient visiblement mieux éclairés
+  // que ceux qui n'en ont pas — l'effet se voit, pas juste le plan lumineux.
+  const NEON_LIGHT_POOL = 6;
+  const NEON_LIGHT_RADIUS = 6.5;
+  const neonLightPool = [];
+  for (let i = 0; i < NEON_LIGHT_POOL; i++) {
+    const light = new THREE.PointLight(0xffffff, 0, NEON_LIGHT_RADIUS - 1.5, 2);
+    group.add(light);
+    neonLightPool.push(light);
   }
 
   // ---------- Quartier pavillonnaire : maisons + réverbères ----------
@@ -680,6 +707,39 @@ export function buildWorld(maze) {
       strips.setColorAt(i, color);
     });
     strips.instanceColor.needsUpdate = true;
+
+    // Réassigne le pool de vraies lumières aux néons les plus proches du
+    // joueur (recalculé chaque frame : balayage de stripPositions, trivial
+    // niveau CPU, sans commune mesure avec le coût qu'aurait une vraie
+    // lumière par néon sur des centaines d'instances).
+    if (stripPositions.length) {
+      const radius2 = NEON_LIGHT_RADIUS * NEON_LIGHT_RADIUS;
+      const nearest = [];
+      for (let i = 0; i < stripPositions.length; i++) {
+        const px = stripPositions[i][0];
+        const pz = stripPositions[i][1];
+        const dx = px - cameraPosition.x;
+        const dz = pz - cameraPosition.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > radius2) continue;
+        nearest.push([d2, i]);
+      }
+      nearest.sort((a, b) => a[0] - b[0]);
+      for (let i = 0; i < neonLightPool.length; i++) {
+        const light = neonLightPool[i];
+        const entry = nearest[i];
+        if (!entry) {
+          light.intensity = 0;
+          continue;
+        }
+        const [d2, idx] = entry;
+        const [px, pz, , tint] = stripPositions[idx];
+        light.position.set(px, WALL_HEIGHT - 0.5, pz);
+        light.color.copy(tint);
+        const falloff = Math.max(0, 1 - Math.sqrt(d2) / NEON_LIGHT_RADIUS);
+        light.intensity = 3.4 * falloff;
+      }
+    }
 
     // Le brouillard prend doucement la teinte de la zone où se trouve le joueur.
     const cx = Math.round(cameraPosition.x / C);

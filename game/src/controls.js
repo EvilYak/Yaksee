@@ -125,7 +125,11 @@ export function createControls({ camera, maze, cellSize, startPos, initialYaw, o
   function requestLock() {
     if (!pointerLockSupported || !isDesktop()) return;
     if (document.pointerLockElement === app) return;
-    app.requestPointerLock();
+    // Certains navigateurs renvoient une Promise qui peut être rejetée (geste
+    // utilisateur jugé insuffisant, contexte sandboxé...) ; sans .catch ici,
+    // ça remonte comme une exception non gérée au lieu d'échouer en silence.
+    const result = app.requestPointerLock();
+    if (result && typeof result.catch === 'function') result.catch(() => {});
   }
 
   app.addEventListener('click', requestLock);
