@@ -238,6 +238,38 @@ function buildTrashCan(bodyMat) {
   return g;
 }
 
+// Cadre mural en volume : une vraie moulure en bois sombre (4 montants qui
+// dépassent du mur) autour d'une toile légèrement en retrait — pas un unique
+// plan plat, qui à distance/faible lumière ne se lit pas comme un objet 3D
+// mais comme une tache de couleur collée au mur.
+function buildFrameObject(material) {
+  const g = new THREE.Group();
+  const moldingMat = new THREE.MeshStandardMaterial({ color: 0x2a1c10, roughness: 0.55 });
+  const size = 0.7;
+  const thick = 0.06;
+  const depth = 0.045;
+
+  const top = box(size, thick, depth, moldingMat);
+  top.position.set(0, size / 2 - thick / 2, depth / 2);
+  g.add(top);
+  const bottom = box(size, thick, depth, moldingMat);
+  bottom.position.set(0, -size / 2 + thick / 2, depth / 2);
+  g.add(bottom);
+  const left = box(thick, size - thick * 2, depth, moldingMat);
+  left.position.set(-size / 2 + thick / 2, 0, depth / 2);
+  g.add(left);
+  const right = box(thick, size - thick * 2, depth, moldingMat);
+  right.position.set(size / 2 - thick / 2, 0, depth / 2);
+  g.add(right);
+
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(size - thick * 2, size - thick * 2), material);
+  panel.position.z = 0.008;
+  g.add(panel);
+  g.userData.panel = panel;
+
+  return g;
+}
+
 export function buildShopWorld() {
   const group = new THREE.Group();
 
@@ -355,19 +387,44 @@ export function buildShopWorld() {
   facadeWash.position.set(0, 3.2, -3.1);
   group.add(facadeWash);
 
-  // Arbres en fond de parking : écorce + feuillage texturés (plutôt que des
-  // silhouettes noires plates) — sombres pour une scène de nuit, mais avec
-  // du grain et de vraies variations de teinte.
+  // Arbres : écorce + feuillage texturés (plutôt que des silhouettes noires
+  // plates) — sombres pour une scène de nuit, mais avec du grain et de
+  // vraies variations de teinte. Le feuillage est toujours positionné à
+  // partir de la hauteur réelle du tronc (jamais un tirage indépendant) :
+  // sans ça, un tronc court + un feuillage placé haut par hasard laissent un
+  // vide entre les deux, un arbre coupé en deux morceaux qui ne se touchent
+  // pas. Le feuillage lui-même est 2-3 masses décalées plutôt qu'une boule
+  // unique, pour que chaque arbre ait une silhouette différente au lieu
+  // d'être la même forme dupliquée partout.
   const treeBarkMat = makeBarkMaterial();
   const treeFoliageMat = makeFoliageMaterial('#14301c');
-  for (let i = 0; i < 9; i++) {
+
+  function buildTree(trunkH, trunkR, foliageR) {
     const t = new THREE.Group();
-    const trunk = limb(0.12, 0.16, 1.6, treeBarkMat, 6);
-    trunk.position.y = 0.8;
+    const trunk = limb(trunkR * 0.72, trunkR, trunkH, treeBarkMat, 6);
+    trunk.position.y = trunkH / 2;
+    trunk.rotation.x = (Math.random() - 0.5) * 0.1;
+    trunk.rotation.z = (Math.random() - 0.5) * 0.1;
     t.add(trunk);
-    const foliage = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1 + Math.random() * 0.6, 0), treeFoliageMat);
-    foliage.position.y = 2.4 + Math.random() * 0.6;
-    t.add(foliage);
+
+    const clumps = 2 + Math.floor(Math.random() * 2);
+    const baseY = trunkH - foliageR * 0.55;
+    for (let i = 0; i < clumps; i++) {
+      const r = foliageR * (0.65 + Math.random() * 0.5);
+      const foliage = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), treeFoliageMat);
+      foliage.position.set(
+        (Math.random() - 0.5) * foliageR * 0.7,
+        baseY + (Math.random() - 0.5) * foliageR * 0.5,
+        (Math.random() - 0.5) * foliageR * 0.7,
+      );
+      t.add(foliage);
+    }
+    return t;
+  }
+
+  // Arbres en fond de parking.
+  for (let i = 0; i < 9; i++) {
+    const t = buildTree(1.5 + Math.random() * 0.5, 0.14, 1.1 + Math.random() * 0.5);
     t.position.set(-9 + Math.random() * 18, 0, -15.5 - Math.random() * 1.5);
     group.add(t);
   }
@@ -376,15 +433,7 @@ export function buildShopWorld() {
   // route) pour masquer l'horizon et les bords du monde plutôt que de les
   // laisser à nu — bien plus imposants que ceux du fond de parking.
   for (let i = 0; i < 16; i++) {
-    const t = new THREE.Group();
-    const trunkH = 2.2 + Math.random() * 1.4;
-    const trunk = limb(0.16, 0.22, trunkH, treeBarkMat, 6);
-    trunk.position.y = trunkH / 2;
-    t.add(trunk);
-    const foliageR = 1.7 + Math.random() * 1.1;
-    const foliage = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageR, 0), treeFoliageMat);
-    foliage.position.y = trunkH + foliageR * 0.6;
-    t.add(foliage);
+    const t = buildTree(2.2 + Math.random() * 1.4, 0.19, 1.7 + Math.random() * 1.1);
     let x, z;
     if (i < 8) {
       x = (i % 2 === 0 ? -1 : 1) * (12 + Math.random() * 4);
@@ -447,12 +496,14 @@ export function buildShopWorld() {
   // Cadres muraux vides, à remplir depuis la caisse (voir decor.js) —
   // rotation.y=PI comme le tableau noir : sans ça ils regarderaient dans le
   // mur au lieu de la pièce (même piège que l'enseigne/tableau plus tôt).
+  // `frames` garde la toile (le panneau intérieur) : c'est elle dont le
+  // matériau change à l'achat, la moulure autour ne bouge jamais.
   const frames = [-3, 0, 3].map((x) => {
-    const frame = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), makeFrameMaterial());
-    frame.position.set(x, 1.7, rz1 - WALL_T / 2 - 0.05);
-    frame.rotation.y = Math.PI;
-    group.add(frame);
-    return frame;
+    const frameObj = buildFrameObject(makeFrameMaterial());
+    frameObj.position.set(x, 1.7, rz1 - WALL_T / 2 - 0.05);
+    frameObj.rotation.y = Math.PI;
+    group.add(frameObj);
+    return frameObj.userData.panel;
   });
 
   // Mur gauche avec la porte des WC (avant : un mur plein avec une porte
@@ -610,20 +661,43 @@ export function buildShopWorld() {
   // la mauvaise action selon la position exacte du joueur.
   const npc = { group: customer, position: customer.position, name: 'Client', radius: 1.4 };
 
-  // ---------- Étagère de présentation (mur gauche) ----------
-  const shelf = box(0.28, 0.05, 2.6, woodMat);
-  shelf.position.set(rx0 + 0.24, 1.0, 0.8);
-  group.add(shelf);
+  // ---------- Rayonnage de présentation (mur gauche) ----------
+  // Un vrai rayon de magasin à trois niveaux (montants + tablettes reliées),
+  // pas une planche isolée avec un seul article dessus : la tablette du
+  // milieu garde les articles à vendre, celle du haut porte un exemplaire de
+  // plus (du stock visible, pas une pièce unique), celle du bas des caisses
+  // de réassort.
+  const shelfX = rx0 + 0.24;
+  [0.45, 1.0, 1.55].forEach((y) => {
+    const plank = box(0.28, 0.04, 2.6, woodMat);
+    plank.position.set(shelfX, y, 0.8);
+    group.add(plank);
+  });
+  [-0.4, 0.8, 2.0].forEach((z) => {
+    const upright = box(0.05, 1.7, 0.05, metalMat);
+    upright.position.set(shelfX, 0.85, z);
+    group.add(upright);
+  });
+
   // Position où un client vient se poster pour "choisir" son objet avant de
   // rejoindre le comptoir (voir customerMovement.js) : un peu en retrait du
   // rayon, face à l'étagère, même Z que l'objet demandé.
   const shelfSlots = {};
   ['baguette', 'cartes', 'piece', 'chapeau'].forEach((id, i) => {
-    const prop = buildMagicProp(id, 2.2);
     const z = -0.1 + i * 0.65;
-    prop.position.set(rx0 + 0.24, 1.025, z);
+    const prop = buildMagicProp(id, 2.2);
+    prop.position.set(shelfX, 1.025, z);
     group.add(prop);
+    const extra = buildMagicProp(id, 1.7);
+    extra.position.set(shelfX, 1.575, z);
+    group.add(extra);
     shelfSlots[id] = { x: rx0 + 0.9, z };
+  });
+  const stockCrateMat = new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 0.9 });
+  [-0.15, 0.85, 1.85].forEach((z) => {
+    const crate = box(0.24, 0.2, 0.22, stockCrateMat);
+    crate.position.set(shelfX, 0.55, z);
+    group.add(crate);
   });
   colliders.push({ minX: rx0 + 0.1, maxX: rx0 + 0.38, minZ: -0.55, maxZ: 2.15 });
 

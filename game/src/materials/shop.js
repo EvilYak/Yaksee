@@ -288,6 +288,21 @@ export function makeFrameMaterial(variant = null) {
   const size = 512;
   const c = makeCanvas(size);
   const ctx = c.getContext('2d');
+
+  if (variant === null) {
+    // Cadre vide, en attente d'achat : une toile sombre et texturée, pas un
+    // aplat clair qui se voit de loin comme une tache flottant sur le mur.
+    ctx.fillStyle = '#1c140e';
+    ctx.fillRect(0, 0, size, size);
+    grungeTint(ctx, size, { color: [8, 5, 2], strength: 0.3, cells: 4, octaves: 3 });
+    addNoise(ctx, size, 10);
+    ctx.strokeStyle = '#0a0705';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(10, 10, size - 20, size - 20);
+    const map = toTexture(c, 1, 1);
+    return new THREE.MeshStandardMaterial({ map, roughness: 0.95 });
+  }
+
   ctx.fillStyle = '#f0e6c8';
   ctx.fillRect(0, 0, size, size);
   ctx.strokeStyle = '#3a2f1a';
@@ -339,7 +354,6 @@ export function makeFrameMaterial(variant = null) {
       ctx.restore();
     }
   }
-  // variant absent/inconnu : cadre vide (juste la bordure), en attente d'achat.
 
   const map = toTexture(c, 1, 1);
   return new THREE.MeshStandardMaterial({ map, roughness: 0.85 });
