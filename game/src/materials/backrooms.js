@@ -110,12 +110,13 @@ export function makeWallpaperMaterial() {
   addNoise(bctx, 256, 55);
 
   // Une tuile = un pan de mur entier (pas de répétition visible dans un même
-  // pan). Même repeat que le bump : le flip par instance (voir
-  // enableUvVariation) doit tourner les deux ensemble, sinon le relief se
-  // désynchronise de la couleur dès qu'un pan est retourné.
+  // pan).
   const map = toTexture(canvas, 1, 1);
   const bumpMap = toBumpTexture(bump, 1, 1);
 
+  // flip: false — le chevron a un sens (pointe vers le haut) ; le transposer
+  // par instance (comme pour un bruit sans direction) le fait pivoter à 90°
+  // et certains pans se retrouvent avec des flèches couchées sur le côté.
   return enableUvVariation(
     new THREE.MeshStandardMaterial({
       map,
@@ -124,6 +125,7 @@ export function makeWallpaperMaterial() {
       roughness: 0.92,
       metalness: 0.0,
     }),
+    { flip: false },
   );
 }
 

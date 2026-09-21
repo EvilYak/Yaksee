@@ -37,7 +37,10 @@ export function makeKittyWallpaperMaterial() {
   addNoise(ctx, size, 8);
 
   const map = toTexture(canvas, 1, 1);
-  return enableUvVariation(new THREE.MeshStandardMaterial({ map, roughness: 0.7, metalness: 0.05 }));
+  // flip: false — les bulles sont inclinées à angle fixe ; les transposer
+  // par instance les ferait pivoter à 90° au lieu de garder l'inclinaison
+  // voulue (même bug que le chevron des backrooms).
+  return enableUvVariation(new THREE.MeshStandardMaterial({ map, roughness: 0.7, metalness: 0.05 }), { flip: false });
 }
 
 export function makeKittyCarpetMaterial() {
