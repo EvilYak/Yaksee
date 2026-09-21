@@ -6,6 +6,8 @@ import { createControls } from './controls.js';
 import { createAudio } from './audio.js';
 import { createPostFX } from './postfx.js';
 import { createHud } from './hud.js';
+import { buildViewArms } from './world/character.js';
+import { createDialogue } from './dialogue.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -35,7 +37,18 @@ scene.add(world.group);
 scene.fog = world.fog;
 scene.background = new THREE.Color(0x59532f);
 
+// Avant-bras/mains bas-poly attachés à la caméra (voir character.js) : la
+// caméra doit être dans le graphe de scène pour que ses enfants soient
+// rendus, d'où le scene.add(camera) — le personnage du joueur "porte" la
+// caméra plutôt que l'inverse.
+scene.add(camera);
+const viewArms = buildViewArms();
+camera.add(viewArms);
+
 const audio = createAudio();
+const dialogue = createDialogue();
+const INTERACT_OPEN_RADIUS = 2.2;
+const INTERACT_CLOSE_RADIUS = 2.8;
 
 const controls = createControls({
   camera,
@@ -154,6 +167,16 @@ function tick() {
     world.update(dt, camera.position, camera);
     hud.update(dt);
     postfx.update(t);
+
+    // PNJ à proximité : ouvre/ferme le dialogue avec hystérésis (deux seuils
+    // de distance différents) pour ne pas clignoter en restant à la limite.
+    world.npcs.forEach((npc) => {
+      const dx = npc.position.x - camera.position.x;
+      const dz = npc.position.z - camera.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < INTERACT_OPEN_RADIUS) dialogue.open(npc);
+      else if (dist > INTERACT_CLOSE_RADIUS && dialogue.isOpenFor(npc)) dialogue.close();
+    });
 
     nextCrackle -= dt;
     if (nextCrackle <= 0) {
