@@ -3,7 +3,8 @@ import { buildShopWorld } from './world/shop.js';
 import { createControls } from './controls.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
-import { createInventory, RECIPES, RESOURCE_LABELS } from './crafting.js';
+import { createInventory, RECIPES, RESOURCE_LABELS, BUY_PRICES, SELL_PRICES } from './crafting.js';
+import { createDialogue } from './dialogue.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -45,6 +46,7 @@ scene.add(moon);
 const audio = createAudio();
 const hud = createHud();
 const inventory = createInventory();
+const dialogue = createDialogue();
 
 const bounds = { minX: -11, maxX: 11, minZ: -16.5, maxZ: 4 };
 
@@ -129,14 +131,28 @@ const craftPanel = document.getElementById('craft-panel');
 const craftClose = document.getElementById('craft-close');
 const craftStockEl = document.getElementById('craft-stock');
 const craftRecipesEl = document.getElementById('craft-recipes');
+const craftBuyEl = document.getElementById('craft-buy');
+const craftSellEl = document.getElementById('craft-sell');
+const craftMoneyEl = document.getElementById('craft-money-value');
+const moneyEl = document.getElementById('money-value');
 const interactHint = document.getElementById('interact-hint');
+const interactLabel = document.getElementById('interact-label');
 const touchInteractBtn = document.getElementById('touch-interact');
+const npcTag = document.getElementById('npc-tag');
+const npcTagName = document.getElementById('npc-tag-name');
 
 let craftOpen = false;
-let inRange = false;
+let target = null; // 'phone' | 'npc' | 'craft' | null
+
+function updateMoneyDisplay() {
+  moneyEl.textContent = inventory.stock.argent;
+  craftMoneyEl.textContent = inventory.stock.argent;
+}
 
 function renderCraftPanel() {
+  updateMoneyDisplay();
   craftStockEl.innerHTML = Object.entries(inventory.stock)
+    .filter(([id]) => id !== 'argent')
     .map(([id, qty]) => `<span>${RESOURCE_LABELS[id] || id} : ${qty}</span>`)
     .join('');
 
@@ -144,13 +160,12 @@ function renderCraftPanel() {
   RECIPES.forEach((recipe) => {
     const row = document.createElement('div');
     row.className = 'recipe-row';
-    const canCraft = inventory.canCraft(recipe);
     row.innerHTML = `<span>${recipe.label}</span>`;
     const btn = document.createElement('button');
     btn.className = 'recipe-craft-btn';
     btn.type = 'button';
     btn.textContent = 'Fabriquer';
-    btn.disabled = !canCraft;
+    btn.disabled = !inventory.canCraft(recipe);
     btn.addEventListener('click', () => {
       if (inventory.craft(recipe.id)) {
         audio.registerBeep();
@@ -159,6 +174,46 @@ function renderCraftPanel() {
     });
     row.appendChild(btn);
     craftRecipesEl.appendChild(row);
+  });
+
+  craftBuyEl.innerHTML = '';
+  Object.entries(BUY_PRICES).forEach(([id, price]) => {
+    const row = document.createElement('div');
+    row.className = 'recipe-row';
+    row.innerHTML = `<span>${RESOURCE_LABELS[id]} — ${price} €</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'recipe-craft-btn';
+    btn.type = 'button';
+    btn.textContent = 'Acheter';
+    btn.disabled = !inventory.canBuy(id);
+    btn.addEventListener('click', () => {
+      if (inventory.buy(id)) {
+        audio.registerBeep();
+        renderCraftPanel();
+      }
+    });
+    row.appendChild(btn);
+    craftBuyEl.appendChild(row);
+  });
+
+  craftSellEl.innerHTML = '';
+  Object.entries(SELL_PRICES).forEach(([id, price]) => {
+    const row = document.createElement('div');
+    row.className = 'recipe-row';
+    row.innerHTML = `<span>${RESOURCE_LABELS[id]} — ${price} €</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'recipe-craft-btn';
+    btn.type = 'button';
+    btn.textContent = 'Vendre';
+    btn.disabled = !inventory.canSell(id);
+    btn.addEventListener('click', () => {
+      if (inventory.sell(id)) {
+        audio.registerBeep();
+        renderCraftPanel();
+      }
+    });
+    row.appendChild(btn);
+    craftSellEl.appendChild(row);
   });
 }
 
@@ -175,15 +230,36 @@ function closeCraftPanel() {
 }
 craftClose.addEventListener('click', closeCraftPanel);
 
-function tryToggleCraft() {
-  if (!inRange && !craftOpen) return;
-  if (craftOpen) closeCraftPanel();
-  else openCraftPanel();
+// Appel téléphonique : reprend telle quelle la réplique d'ouverture de la
+// référence ("Salut, c'est Rosa."), suivie d'une commande qui relie l'appel
+// à la chaîne de fabrication plutôt que de rester une simple réplique isolée.
+function openPhoneCall() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  dialogue.start('Rosa', ["Salut, c'est Rosa.", 'Vous auriez une plante en pot ? Je passe la chercher tout à l’heure.'], '📞');
+}
+
+function openNpcTalk() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  dialogue.start(shop.npc.name, ['Bonjour ! Vous auriez un bouquet à me vendre ?'], '💬');
+}
+
+function handleInteractPress() {
+  if (dialogue.isOpen) {
+    dialogue.advance();
+    return;
+  }
+  if (craftOpen) {
+    closeCraftPanel();
+    return;
+  }
+  if (target === 'phone') openPhoneCall();
+  else if (target === 'npc') openNpcTalk();
+  else if (target === 'craft') openCraftPanel();
 }
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyE') tryToggleCraft();
+  if (e.code === 'KeyE') handleInteractPress();
 });
-touchInteractBtn.addEventListener('click', tryToggleCraft);
+touchInteractBtn.addEventListener('click', handleInteractPress);
 
 let started = false;
 startBtn.addEventListener('click', () => {
@@ -198,6 +274,37 @@ startBtn.addEventListener('click', () => {
   }
 });
 
+const INTERACT_LABELS = { phone: 'Téléphone', craft: 'Comptoir' };
+const npcHeadWorldPos = new THREE.Vector3();
+const npcHeadScreenPos = new THREE.Vector3();
+
+function nearestTarget(p) {
+  const dPhone = Math.hypot(p.x - shop.phonePoint.x, p.z - shop.phonePoint.z);
+  if (dPhone < shop.phonePoint.radius) return 'phone';
+  const dNpc = Math.hypot(p.x - shop.npc.position.x, p.z - shop.npc.position.z);
+  if (dNpc < shop.npc.radius) return 'npc';
+  const dCraft = Math.hypot(p.x - shop.craftPoint.x, p.z - shop.craftPoint.z);
+  if (dCraft < shop.craftPoint.radius) return 'craft';
+  return null;
+}
+
+function updateNpcTag() {
+  const dist = camera.position.distanceTo(shop.npc.position);
+  npcHeadWorldPos.set(shop.npc.position.x, 1.72, shop.npc.position.z);
+  npcHeadScreenPos.copy(npcHeadWorldPos).project(camera);
+  const onScreen = npcHeadScreenPos.z < 1 && Math.abs(npcHeadScreenPos.x) < 0.95 && Math.abs(npcHeadScreenPos.y) < 0.95;
+  if (!onScreen || dist > 8 || craftOpen || dialogue.isOpen) {
+    npcTag.classList.add('hidden');
+    return;
+  }
+  npcTagName.textContent = shop.npc.name;
+  const sx = (npcHeadScreenPos.x * 0.5 + 0.5) * window.innerWidth;
+  const sy = (-npcHeadScreenPos.y * 0.5 + 0.5) * window.innerHeight;
+  npcTag.style.left = `${sx}px`;
+  npcTag.style.top = `${sy}px`;
+  npcTag.classList.remove('hidden');
+}
+
 const clock = new THREE.Clock();
 let wasOutside = true;
 
@@ -206,18 +313,23 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.1);
 
   if (started) {
-    if (!craftOpen) controls.update(dt);
+    const paused = craftOpen || dialogue.isOpen;
+    if (!paused) controls.update(dt);
 
     const p = controls.position;
     const isOutside = p.z < -3.6;
     if (wasOutside && !isOutside) audio.doorChime();
     wasOutside = isOutside;
 
-    const dx = p.x - shop.craftPoint.x;
-    const dz = p.z - shop.craftPoint.z;
-    inRange = Math.hypot(dx, dz) < shop.craftPoint.radius;
-    touchInteractBtn.classList.toggle('hidden', !inRange);
-    if (!craftOpen) interactHint.classList.toggle('hidden', !inRange);
+    moneyEl.textContent = inventory.stock.argent;
+
+    target = paused ? null : nearestTarget(p);
+    touchInteractBtn.classList.toggle('hidden', !target && !craftOpen && !dialogue.isOpen);
+    if (target === 'npc') interactLabel.textContent = shop.npc.name;
+    else if (target) interactLabel.textContent = INTERACT_LABELS[target];
+    interactHint.classList.toggle('hidden', !target || craftOpen);
+
+    updateNpcTag();
   }
 
   renderer.render(scene, camera);

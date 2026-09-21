@@ -24,12 +24,27 @@
           <span id="objective-icon">○</span>
           <span id="objective-text">Préparez-vous pour les clients</span>
         </div>
+        <div id="money">💶 <span id="money-value">0</span> €</div>
         <button id="toggle-settings" class="toggle-btn" type="button">⚙</button>
       </div>
 
       <div id="interact-hint" class="hidden">
         <span class="key-badge">E</span>
-        <span>Comptoir</span>
+        <span id="interact-label">Comptoir</span>
+      </div>
+
+      <div id="npc-tag" class="hidden">
+        <span>💬</span>
+        <span id="npc-tag-name">Client</span>
+      </div>
+
+      <div id="dialogue-box" class="hidden">
+        <div id="dialogue-name">
+          <span id="dialogue-icon">💬</span>
+          <span id="dialogue-name-text">Client</span>
+        </div>
+        <div id="dialogue-text"></div>
+        <div id="dialogue-next">▼</div>
       </div>
 
       <div id="settings-panel" class="hidden">
@@ -56,8 +71,14 @@
       <div id="craft-panel" class="hidden">
         <div id="craft-card">
           <div id="craft-title">COMPTOIR</div>
+          <div id="craft-money">💶 <span id="craft-money-value">0</span> €</div>
           <div id="craft-stock"></div>
+          <div class="craft-section-title">Fabriquer</div>
           <div id="craft-recipes"></div>
+          <div class="craft-section-title">Acheter</div>
+          <div id="craft-buy"></div>
+          <div class="craft-section-title">Vendre</div>
+          <div id="craft-sell"></div>
           <button id="craft-close" type="button">FERMER</button>
         </div>
       </div>

@@ -24,6 +24,11 @@ export const RECIPES = [
   },
 ];
 
+// Achat de matières premières et vente des produits finis : sans ça, l'argent
+// n'a aucun usage et le stock de départ finit par tout bloquer.
+export const BUY_PRICES = { graines: 1, pot: 2, terre: 1, verre: 3 };
+export const SELL_PRICES = { plante: 8, bouquet: 15 };
+
 export const RESOURCE_LABELS = {
   graines: 'Graines',
   eau: 'Eau',
@@ -33,12 +38,14 @@ export const RESOURCE_LABELS = {
   pousse: 'Pousses',
   plante: 'Plantes',
   bouquet: 'Bouquets',
+  argent: 'Argent',
 };
 
 export function createInventory() {
   // Stock de départ volontairement réduit : de quoi tester la chaîne
-  // complète une à deux fois, pas un stock illimité.
-  const stock = { graines: 4, eau: 6, pot: 3, terre: 3, verre: 2, pousse: 0, plante: 0, bouquet: 0 };
+  // complète une à deux fois, pas un stock illimité — l'argent gagné en
+  // vendant sert ensuite à racheter des matières premières.
+  const stock = { graines: 4, eau: 6, pot: 3, terre: 3, verre: 2, pousse: 0, plante: 0, bouquet: 0, argent: 20 };
 
   function canCraft(recipe) {
     return Object.entries(recipe.inputs).every(([id, qty]) => (stock[id] || 0) >= qty);
@@ -54,5 +61,27 @@ export function createInventory() {
     return true;
   }
 
-  return { stock, canCraft, craft };
+  function canBuy(id) {
+    return stock.argent >= (BUY_PRICES[id] || Infinity);
+  }
+
+  function buy(id) {
+    if (!canBuy(id)) return false;
+    stock.argent -= BUY_PRICES[id];
+    stock[id] = (stock[id] || 0) + 1;
+    return true;
+  }
+
+  function canSell(id) {
+    return (stock[id] || 0) > 0 && SELL_PRICES[id] !== undefined;
+  }
+
+  function sell(id) {
+    if (!canSell(id)) return false;
+    stock[id] -= 1;
+    stock.argent += SELL_PRICES[id];
+    return true;
+  }
+
+  return { stock, canCraft, craft, canBuy, buy, canSell, sell };
 }

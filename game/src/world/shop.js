@@ -15,6 +15,7 @@ import {
   makeFoliageMaterial,
   makeCarPaintMaterial,
 } from '../materials/index.js';
+import { buildCharacterBody } from './character.js';
 
 // Boutique de plantes : une seule scène fixe (pas de génération procédurale
 // de plan comme l'ancien labyrinthe) — un petit parking, une façade vitrée,
@@ -297,6 +298,29 @@ export function buildShopWorld() {
 
   const craftPoint = { x: 4.3, z: -2.2, radius: 1.7 };
 
+  // Téléphone du comptoir (appels de commande) : combiné + base, posé côté
+  // client pour rester visible sans être caché par la caisse.
+  const phoneBase = box(0.14, 0.05, 0.2, metalMat);
+  phoneBase.position.set(4.35, 0.95 + 0.025, -0.9);
+  group.add(phoneBase);
+  const phoneHandset = limb(0.03, 0.03, 0.22, metalMat, 8);
+  phoneHandset.rotation.z = Math.PI / 2;
+  phoneHandset.position.set(4.35, 0.95 + 0.09, -0.88);
+  group.add(phoneHandset);
+  const phonePoint = { x: 4.35, z: -0.9, radius: 1.1 };
+
+  // Client en attente près de l'entrée : personnage bas-poly (character.js),
+  // visage encore un espace réservé — voir buildCharacterBody pour poser une
+  // vraie photo plus tard (group.userData.faceMesh.material.map = ...).
+  const customer = buildCharacterBody({ shirtColor: 0x8fa0a8, pantsColor: 0x24242a });
+  customer.position.set(0.8, 0, -0.6);
+  customer.rotation.y = Math.PI * 0.65;
+  group.add(customer);
+  // Rayon volontairement réduit et loin du comptoir/téléphone : les trois
+  // zones d'interaction ne doivent jamais se chevaucher, sinon "E" déclenche
+  // la mauvaise action selon la position exacte du joueur.
+  const npc = { group: customer, position: customer.position, name: 'Client', radius: 1.4 };
+
   // ---------- Étagère à plantes (mur gauche) ----------
   const shelf = box(0.28, 0.05, 2.6, woodMat);
   shelf.position.set(rx0 + 0.24, 1.0, 0.8);
@@ -373,5 +397,5 @@ export function buildShopWorld() {
   const startWorldPos = new THREE.Vector3(0, 0, -9);
   const startYaw = Math.PI;
 
-  return { group, colliders, craftPoint, startWorldPos, startYaw };
+  return { group, colliders, craftPoint, phonePoint, npc, startWorldPos, startYaw };
 }

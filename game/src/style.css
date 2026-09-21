@@ -85,6 +85,18 @@ html, body {
   pointer-events: auto;
 }
 
+#money {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 64px;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(238, 240, 216, 0.3);
+  border-radius: 3px;
+  padding: 6px 10px;
+}
+
 .toggle-btn {
   font-family: inherit;
   font-size: 13px;
@@ -135,6 +147,87 @@ html, body {
   border: 1px solid #eef0d8;
   border-radius: 3px;
   font-size: 12px;
+}
+
+/* ---------- Étiquette flottante au-dessus d'un PNJ ---------- */
+
+#npc-tag {
+  position: absolute;
+  z-index: 13;
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffe94d;
+  font-size: 12px;
+  letter-spacing: 1px;
+  background: #0a0a08;
+  border: 2px solid #ffe94d;
+  border-radius: 2px;
+  padding: 3px 9px;
+  pointer-events: none;
+}
+
+#npc-tag.hidden {
+  display: none;
+}
+
+/* ---------- Dialogue (PNJ / téléphone) ---------- */
+
+#dialogue-box {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 18;
+  background: rgba(6, 6, 4, 0.9);
+  border: 2px solid #eef0d8;
+  border-radius: 2px;
+  padding: 14px 16px 18px;
+  pointer-events: auto;
+}
+
+#dialogue-box.hidden {
+  display: none;
+}
+
+#dialogue-name {
+  position: absolute;
+  top: -14px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #0a0a08;
+  border: 2px solid #eef0d8;
+  border-radius: 2px;
+  padding: 2px 10px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #ffe94d;
+}
+
+#dialogue-text {
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: 0.5px;
+  color: #ffe94d;
+  text-shadow: 1px 1px 0 #4a3f00;
+  min-height: 2.4em;
+}
+
+#dialogue-next {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  color: #ffe94d;
+  font-size: 13px;
+  animation: dialogue-bounce 1s ease-in-out infinite;
+}
+
+@keyframes dialogue-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
 }
 
 /* ---------- Réglages ---------- */
@@ -256,8 +349,30 @@ html, body {
   font-size: 14px;
   letter-spacing: 4px;
   opacity: 0.85;
-  margin-bottom: 14px;
+  margin-bottom: 4px;
   text-align: center;
+}
+
+#craft-money {
+  text-align: center;
+  font-size: 15px;
+  color: #8fae4a;
+  margin-bottom: 14px;
+}
+
+.craft-section-title {
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+
+#craft-buy,
+#craft-sell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
 #craft-stock {

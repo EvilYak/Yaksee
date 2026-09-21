@@ -4,13 +4,37 @@ import * as THREE from 'three';
 // côtés, légèrement effilés), pas des cubes à angle droit — un membre fait
 // de BoxGeometry pures se lit comme du Minecraft (voxels), pas comme un
 // modèle PS1 (toujours des prismes/troncs de cône bas-poly, jamais des
-// cubes). La tête reste un socle simple : le matériau est remplacé plus
-// tard par une texture "tête libre de droit" fournie par l'utilisateur
-// (voir group.userData.headMesh).
+// cubes).
 const LIMB_SEGMENTS = 6;
 
 function flatMat(color, map) {
   return new THREE.MeshStandardMaterial({ color, map: map || null, flatShading: true, roughness: 1 });
+}
+
+// Visage : une photo "écrasée" (plaquée à plat) sur un volume de tête
+// bas-poly, comme dans les jeux de référence — pas une tête entièrement
+// texturée en 3D. Le crâne reste un solide arrondi bas-poly (icosaèdre,
+// jamais une boîte) et le visage est un plan séparé devant, prêt à recevoir
+// une photo fournie par l'utilisateur (voir group.userData.faceMesh —
+// `faceMesh.material.map = <texture PNG>`). Le dégradé ci-dessous n'est
+// qu'un espace réservé neutre : aucun visage réel n'est généré ici.
+function makePlaceholderFaceTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#3a362e';
+  ctx.fillRect(0, 0, size, size);
+  const g = ctx.createRadialGradient(size / 2, size * 0.42, size * 0.08, size / 2, size * 0.42, size * 0.42);
+  g.addColorStop(0, '#6a6254');
+  g.addColorStop(1, '#3a362e');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(size / 2, size * 0.42, size * 0.3, size * 0.38, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 // Non éclairé : la lampe du joueur (PointLight qui suit la caméra) est à
@@ -35,7 +59,7 @@ export function buildCharacterBody({ shirtColor = 0x3a4a5a, pantsColor = 0x24242
   const torsoMat = flatMat(shirtColor);
   const skinMat = flatMat(skinColor);
   const pantsMat = flatMat(pantsColor);
-  const headMat = flatMat(0xd9c9a8);
+  const headMat = flatMat(0x2a2620);
 
   // Torse en tronc de prisme : plus large aux épaules qu'à la taille.
   const torso = limb(0.24, 0.19, 0.52, torsoMat);
@@ -46,12 +70,19 @@ export function buildCharacterBody({ shirtColor = 0x3a4a5a, pantsColor = 0x24242
   neck.position.y = 1.46;
   group.add(neck);
 
-  // Socle de tête : `group.userData.headMesh.material.map = <texture>` pour
-  // poser la tête libre de droit une fois choisie, sans reconstruire le reste.
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.3, 0.24), headMat);
-  head.position.y = 1.64;
+  // Crâne bas-poly (jamais une boîte) + visage en plan séparé devant, où
+  // vient se "plaquer" la photo (voir group.userData.faceMesh plus bas).
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14, 1), headMat);
+  head.position.y = 1.65;
+  head.scale.set(1, 1.15, 0.92);
   group.add(head);
   group.userData.headMesh = head;
+
+  const faceMat = new THREE.MeshBasicMaterial({ map: makePlaceholderFaceTexture() });
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.27), faceMat);
+  face.position.set(0, 1.65, 0.125);
+  group.add(face);
+  group.userData.faceMesh = face;
 
   function arm(side) {
     const upper = limb(0.065, 0.058, 0.28, skinMat);
