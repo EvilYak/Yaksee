@@ -4,7 +4,6 @@ import { ZONES, DEFAULT_THEME, DEFAULT_WALL_HEIGHT } from './zones.js';
 import { addChunkedInstances } from './world/chunking.js';
 import { rectWorldExtent, buildFloorWithHoles, collectCellEdges, buildEdgeGridMesh } from './world/geometry.js';
 import { buildHouse, buildMirror, buildStreetlight, buildPillar, buildStopSign, buildCrate } from './world/decor.js';
-import { buildCharacterBody } from './world/character.js';
 import { buildThemeConfig } from './world/theme-config.js';
 
 export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
@@ -475,27 +474,10 @@ export function buildWorld(maze) {
     followLight.visible = enabled;
   }
 
-  // ---------- PNJ de test : personnage bas-poly PS1 avec dialogue ----------
-  // Un seul PNJ pour l'instant, près du point de départ — preuve de concept
-  // du système de dialogue (voir main.js/dialogue.js). La tête reste un
-  // socle de couleur unie en attendant la texture "tête libre de droit" que
-  // l'utilisateur posera lui-même sur npc.group.userData.headMesh.
-  const startPos = cellToWorld(maze.startCell(), C);
-  const npc = buildCharacterBody({ shirtColor: 0x5a4a2a, pantsColor: 0x2f2a20 });
-  npc.position.set(startPos.x + 1.4, 0, startPos.z + 0.6);
-  npc.rotation.y = Math.PI;
-  group.add(npc);
-  const npcs = [
-    {
-      group: npc,
-      position: npc.position,
-      name: 'Client',
-      lines: [
-        'Elles sont fraîchement cueillies, ces graines.',
-        'Elles viennent tout droit de mon champ.',
-      ],
-    },
-  ];
+  // Pas de PNJ placé par défaut : le personnage (character.js) et le
+  // dialogue (dialogue.js) restent disponibles pour en ajouter quand le
+  // contenu (qui, quoi) sera décidé — voir buildCharacterBody/createDialogue.
+  const npcs = [];
 
   return {
     group,
@@ -504,7 +486,7 @@ export function buildWorld(maze) {
     setLampEnabled,
     cellSize: C,
     size,
-    startWorldPos: startPos,
+    startWorldPos: cellToWorld(maze.startCell(), C),
     npcs,
   };
 }
