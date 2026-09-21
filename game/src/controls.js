@@ -322,5 +322,17 @@ export function createControls({ camera, colliders, bounds, startPos, initialYaw
     return { moving: speedScale > 0.05, sprinting, crouching, position };
   }
 
-  return { update, position, setSensitivity, setInvertY, pollInteractPressed };
+  // Téléportation (ouverture de la boutique : voir shiftStart.js) : repose
+  // la position et l'angle de vue directement, sans passer par la collision
+  // ni la vitesse — ce n'est pas un déplacement du joueur.
+  function teleport(x, z, y) {
+    position.x = x;
+    position.z = z;
+    yaw = y;
+    jumpOffset = 0;
+    jumpVelocity = 0;
+    grounded = true;
+  }
+
+  return { update, position, setSensitivity, setInvertY, pollInteractPressed, teleport };
 }

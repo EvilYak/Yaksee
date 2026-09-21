@@ -117,8 +117,111 @@ export function makeGlassMaterial() {
   });
 }
 
+// Métal brossé : des stries horizontales claires sur fond teinté, plutôt
+// qu'une couleur plate — visible sur la poubelle, le téléphone, la caisse,
+// les lampadaires (tous les objets qui partagent ce matériau).
 export function makeMetalMaterial(hex = '#8a8a8f') {
-  return new THREE.MeshStandardMaterial({ color: hex, roughness: 0.4, metalness: 0.65 });
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 140; i++) {
+    const y = Math.random() * size;
+    ctx.strokeStyle = `rgba(255,255,255,${0.03 + Math.random() * 0.06})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(size, y + (Math.random() - 0.5) * 5);
+    ctx.stroke();
+  }
+  addNoise(ctx, size, 5);
+  const map = toTexture(c, 1, 1);
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.4, metalness: 0.65 });
+}
+
+// Écorce : fibres verticales sombres + grain, pour les troncs d'arbre du
+// parking (auparavant une silhouette noire plate, sans aucun relief).
+export function makeBarkMaterial() {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1e150c';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 34; i++) {
+    const x = Math.random() * size;
+    ctx.strokeStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.18})`;
+    ctx.lineWidth = 2 + Math.random() * 3;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (Math.random() - 0.5) * 26, size);
+    ctx.stroke();
+  }
+  grungeTint(ctx, size, { color: [8, 5, 2], strength: 0.3, cells: 5, octaves: 3 });
+  addNoise(ctx, size, 8);
+  const map = toTexture(c, 1, 2);
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.95 });
+}
+
+// Tissu (vêtements du personnage) : léger grain + variations de teinte,
+// pour ne plus avoir un aplat de couleur uni façon papier découpé.
+export function makeFabricMaterial(hex) {
+  const size = 128;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, size, size);
+  grungeTint(ctx, size, { color: [0, 0, 0], strength: 0.14, cells: 4, octaves: 2 });
+  addNoise(ctx, size, 12);
+  const map = toTexture(c, 2, 2);
+  return new THREE.MeshStandardMaterial({ map, flatShading: true, roughness: 1 });
+}
+
+// Ciel nocturne : dégradé + étoiles + une lune discrète, sur une grande
+// sphère qui entoure la scène — remplace l'aplat de couleur uni qui ne
+// donnait aucune impression de ciel une fois en jeu.
+export function makeNightSkyMaterial() {
+  const size = 512;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, size);
+  g.addColorStop(0, '#05070f');
+  g.addColorStop(0.55, '#0c1730');
+  g.addColorStop(0.8, '#1b2b4c');
+  g.addColorStop(1, '#2c3e5c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 650; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size * 0.82;
+    const heightFade = 1 - y / size;
+    if (Math.random() > heightFade * 0.85 + 0.08) continue;
+    const r = Math.random() * 1.2 + 0.25;
+    const b = 0.35 + Math.random() * 0.6;
+    ctx.fillStyle = `rgba(255,255,255,${b})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const moonX = size * 0.76;
+  const moonY = size * 0.16;
+  const halo = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 40);
+  halo.addColorStop(0, 'rgba(232,230,210,0.55)');
+  halo.addColorStop(1, 'rgba(232,230,210,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, 40, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#eae7d4';
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshBasicMaterial({ map, side: THREE.BackSide, fog: false, toneMapped: false });
 }
 
 // Tableau noir d'arrière-boutique : les recettes viennent telles quelles de

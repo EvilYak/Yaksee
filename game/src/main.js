@@ -15,6 +15,8 @@ import { createTrashPanel } from './panels/trashPanel.js';
 import { createClosetPanel } from './panels/closetPanel.js';
 import { createToolRuntime } from './toolRuntime.js';
 import { createShiftEndScreen } from './shiftEnd.js';
+import { createShiftStart } from './shiftStart.js';
+import { createCustomerMovement } from './customerMovement.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -56,11 +58,13 @@ camera.add(heldToolGroup);
 // Lampe frontale/torse : indépendante de l'outil en main (un seul objet à la
 // fois dans la main, mais la lampe n'occupe pas ce créneau).
 let flashlightOn = true;
-// Intensité modeste + chute physique (decay=2) : une lampe torse très proche
-// de la caméra sature vite l'écran (ACES tonemapping) si elle est trop
-// puissante ou tombe trop lentement — la boutique a déjà un bon éclairage
-// ambiant, la lampe ne sert qu'à compléter les coins sombres.
-const flashlight = new THREE.SpotLight(0xfff2c0, 3.5, 9, Math.PI / 6.5, 0.4, 2);
+// Intensité modeste + chute physique (decay=2.2) : dans une boutique aussi
+// petite (pièces d'environ 7x7m), le joueur se retrouve régulièrement à
+// 1-2m d'un mur en la regardant en face — une lampe trop puissante y sature
+// complètement l'écran (ACES tonemapping) à cette distance, pas seulement à
+// bout portant. La boutique a déjà un bon éclairage ambiant, la lampe ne
+// sert qu'à compléter les coins sombres.
+const flashlight = new THREE.SpotLight(0xfff2c0, 0.55, 7, Math.PI / 6.5, 0.55, 2.4);
 flashlight.position.set(0.1, -0.15, 0.05);
 camera.add(flashlight);
 camera.add(flashlight.target);
@@ -78,7 +82,7 @@ window.addEventListener('keydown', (e) => {
 // de base, une scène de nuit rendue en PBR (MeshStandardMaterial) tombe à
 // un noir quasi total dès qu'on s'éloigne des points lumineux — un vrai
 // parking de nuit reste éclairé par le ciel + l'enseigne + les lampadaires.
-scene.add(new THREE.HemisphereLight(0x5a72a8, 0x2a2418, 1.4));
+scene.add(new THREE.HemisphereLight(0x5a72a8, 0x2a2418, 1.1));
 const moon = new THREE.DirectionalLight(0x9fb0d8, 0.7);
 moon.position.set(-6, 14, -6);
 scene.add(moon);
@@ -145,6 +149,12 @@ registerPanel = createRegisterPanel({ stock, customers, shift, audio, decorState
 trashPanel = createTrashPanel({ stock });
 
 const shiftEndScreen = createShiftEndScreen({ stock, shift });
+const shiftStart = createShiftStart({ controls, shop });
+const customerMovement = createCustomerMovement({
+  npcGroup: shop.npc.group,
+  shelfSlots: shop.shelfSlots,
+  waitSpot: { x: shop.npc.position.x, z: shop.npc.position.z },
+});
 
 // ---------- Téléphone / PNJ : dialogues ----------
 const interactHint = document.getElementById('interact-hint');
@@ -190,7 +200,8 @@ function handleInteractPress() {
     closetPanel.close();
     return;
   }
-  if (target === 'phone') openPhoneCall();
+  if (target === 'sign') shiftStart.begin();
+  else if (target === 'phone') openPhoneCall();
   else if (target === 'npc') openNpcTalk();
   else if (target === 'register') registerPanel.open();
   else if (target === 'trash') trashPanel.open();
@@ -214,11 +225,15 @@ startBtn.addEventListener('click', () => {
   }
 });
 
-const INTERACT_LABELS = { phone: 'Téléphone', register: 'Caisse', trash: 'Poubelle', closet: 'Placard' };
+const INTERACT_LABELS = { sign: 'Enseigne', phone: 'Téléphone', register: 'Caisse', trash: 'Poubelle', closet: 'Placard' };
 const npcHeadWorldPos = new THREE.Vector3();
 const npcHeadScreenPos = new THREE.Vector3();
 
 function nearestTarget(p) {
+  if (!shiftStart.started) {
+    const dSign = Math.hypot(p.x - shop.signPoint.x, p.z - shop.signPoint.z);
+    if (dSign < shop.signPoint.radius) return 'sign';
+  }
   const dPhone = Math.hypot(p.x - shop.phonePoint.x, p.z - shop.phonePoint.z);
   if (dPhone < shop.phonePoint.radius) return 'phone';
   if (customers.current) {
@@ -270,7 +285,7 @@ function tick() {
     if (!paused) controls.update(dt);
     if (controls.pollInteractPressed()) handleInteractPress();
 
-    if (!shift.ended) {
+    if (shiftStart.started && !shift.ended) {
       shift.update(dt);
       customers.update(dt);
     }
@@ -280,8 +295,10 @@ function tick() {
     }
 
     toolRuntime.updateProjectiles(dt);
+    shop.doors.forEach((door) => door.update(dt, controls.position));
 
     shop.npc.group.visible = !!customers.current;
+    customerMovement.update(dt, customers.current);
 
     const p = controls.position;
     const isOutside = p.z < -3.6;
@@ -290,7 +307,10 @@ function tick() {
 
     moneyEl.textContent = stock.stock.argent;
     timeEl.textContent = shift.formatted();
-    if (!cleaning.allClean) {
+    if (!shiftStart.started) {
+      const sub = cleaning.allClean ? "l'enseigne est à l'entrée" : `taches nettoyées (${cleaning.cleanedCount}/${cleaning.total}) puis l'enseigne à l'entrée`;
+      hud.setObjective('Préparez la boutique avant d\'ouvrir', sub);
+    } else if (!cleaning.allClean) {
       hud.setObjective('Nettoyer le magasin', `taches nettoyées (${cleaning.cleanedCount}/${cleaning.total})`);
     } else {
       hud.setObjective(customers.current ? 'Un client attend au comptoir !' : 'En attente de clients...');

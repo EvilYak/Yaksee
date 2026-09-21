@@ -19,4 +19,7 @@ export {
   makeFoliageMaterial,
   makeCarPaintMaterial,
   makeFrameMaterial,
+  makeBarkMaterial,
+  makeFabricMaterial,
+  makeNightSkyMaterial,
 } from './shop.js';

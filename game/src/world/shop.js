@@ -15,8 +15,11 @@ import {
   makeFoliageMaterial,
   makeCarPaintMaterial,
   makeFrameMaterial,
+  makeBarkMaterial,
+  makeNightSkyMaterial,
 } from '../materials/index.js';
 import { buildCharacterBody } from './character.js';
+import { createSlidingDoor } from '../doors.js';
 import { ITEMS } from '../economy.js';
 
 // Boutique de plantes : une seule scène fixe (pas de génération procédurale
@@ -78,16 +81,6 @@ function aabbFromBox(mesh, cx, cz) {
 
 function limb(rTop, rBot, h, mat, segments = 8) {
   return new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, segments), mat);
-}
-
-function buildDoor(w, h, doorMat, cx, cz, rotY = 0) {
-  const g = new THREE.Group();
-  const leaf = box(w, h, 0.06, doorMat);
-  leaf.position.y = h / 2;
-  g.add(leaf);
-  g.position.set(cx, 0, cz);
-  g.rotation.y = rotY;
-  return g;
 }
 
 // Articles de la boutique de magie, pour l'étagère et l'arrière-boutique —
@@ -154,6 +147,12 @@ export function buildShopWorld() {
   const colliders = [];
   const addCollider = (mesh, cx, cz) => colliders.push(aabbFromBox(mesh, cx, cz));
 
+  // Ciel nocturne : une grande sphère texturée (étoiles + lune) qui entoure
+  // toute la scène, à la place d'un aplat de couleur uni qui ne donnait
+  // aucune impression de ciel une fois en jeu.
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(46, 24, 16), makeNightSkyMaterial());
+  group.add(sky);
+
   // ---------- Parking (z négatif = extérieur) ----------
   const lot = new THREE.Mesh(new THREE.PlaneGeometry(22, 16), asphaltMat);
   lot.rotation.x = -Math.PI / 2;
@@ -216,14 +215,17 @@ export function buildShopWorld() {
   facadeWash.position.set(0, 3.2, -3.1);
   group.add(facadeWash);
 
-  // Silhouettes d'arbres en fond de parking.
-  const treeMat = new THREE.MeshBasicMaterial({ color: 0x05070a });
+  // Arbres en fond de parking : écorce + feuillage texturés (plutôt que des
+  // silhouettes noires plates) — sombres pour une scène de nuit, mais avec
+  // du grain et de vraies variations de teinte.
+  const treeBarkMat = makeBarkMaterial();
+  const treeFoliageMat = makeFoliageMaterial('#14301c');
   for (let i = 0; i < 9; i++) {
     const t = new THREE.Group();
-    const trunk = limb(0.12, 0.16, 1.6, treeMat, 6);
+    const trunk = limb(0.12, 0.16, 1.6, treeBarkMat, 6);
     trunk.position.y = 0.8;
     t.add(trunk);
-    const foliage = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1 + Math.random() * 0.6, 0), treeMat);
+    const foliage = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1 + Math.random() * 0.6, 0), treeFoliageMat);
     foliage.position.y = 2.4 + Math.random() * 0.6;
     t.add(foliage);
     t.position.set(-9 + Math.random() * 18, 0, -15.5 - Math.random() * 1.5);
@@ -260,6 +262,18 @@ export function buildShopWorld() {
   tagline.rotation.y = Math.PI;
   group.add(tagline);
 
+  // Enseigne FERMÉ / OUVERT, à côté de la porte : le joueur doit venir la
+  // retourner pour lancer le service (voir shiftStart.js) plutôt que le
+  // service démarrant tout seul dès l'écran de démarrage, client déjà planté
+  // au comptoir compris.
+  const closedSignMat = makeSignMaterial('FERMÉ', { bg: '#5a1a16', fg: '#f0d8cc', fontSize: 46 });
+  const openSignMat = makeSignMaterial('OUVERT', { bg: '#1c3319', fg: '#d4af37', fontSize: 46 });
+  const shopSign = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.32), closedSignMat);
+  shopSign.position.set(0.85, 1.55, rz0 - WALL_T / 2 - 0.05);
+  shopSign.rotation.y = Math.PI;
+  group.add(shopSign);
+  const signPoint = { x: 0.85, z: rz0 - 0.6, radius: 0.9 };
+
   const backWallMain = wallWithGap('x', rx1 - rx0, WALL_H, WALL_T, wallMat, 0, 0);
   backWallMain.position.set(0, 0, rz1);
   group.add(backWallMain);
@@ -276,10 +290,17 @@ export function buildShopWorld() {
     return frame;
   });
 
-  const leftWall = wallWithGap('z', rz1 - rz0, WALL_H, WALL_T, brickMat, 0, 0);
+  // Mur gauche avec la porte des WC (avant : un mur plein avec une porte
+  // décorative plaquée devant — impossible à ouvrir puisqu'il n'y avait
+  // aucune brèche réelle derrière).
+  const WC_DOOR_W = 0.9;
+  const WC_DOOR_H = 2.0;
+  const wcDoorZ = -2.6;
+  const leftWall = wallWithGap('z', rz1 - rz0, WALL_H, WALL_T, brickMat, wcDoorZ, WC_DOOR_W, WC_DOOR_H);
   leftWall.position.set(rx0, 0, 0);
   group.add(leftWall);
-  colliders.push({ minX: rx0 - WALL_T / 2, maxX: rx0 + WALL_T / 2, minZ: rz0, maxZ: rz1 });
+  colliders.push({ minX: rx0 - WALL_T / 2, maxX: rx0 + WALL_T / 2, minZ: rz0, maxZ: wcDoorZ - WC_DOOR_W / 2 });
+  colliders.push({ minX: rx0 - WALL_T / 2, maxX: rx0 + WALL_T / 2, minZ: wcDoorZ + WC_DOOR_W / 2, maxZ: rz1 });
 
   // Mur droit avec la porte vers l'arrière-boutique.
   const rightWall = wallWithGap('z', rz1 - rz0, WALL_H, WALL_T, wallMat, 0, DOOR_W, DOOR_H);
@@ -303,10 +324,64 @@ export function buildShopWorld() {
     const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.7), new THREE.MeshBasicMaterial({ color: 0xfff6d8, toneMapped: false }));
     fixture.position.set(x, WALL_H - 0.04, z);
     group.add(fixture);
-    const light = new THREE.PointLight(0xfff6d8, 6, 7, 2);
+    const light = new THREE.PointLight(0xfff6d8, 3, 7, 2);
     light.position.set(x, WALL_H - 0.3, z);
     group.add(light);
   });
+
+  // ---------- Toilettes (petite pièce derrière la porte WC) ----------
+  const wcx0 = rx0 - 1.7;
+  const wcx1 = rx0;
+  const wcz0 = wcDoorZ - 0.8;
+  const wcz1 = wcDoorZ + 0.8;
+
+  const wcFloor = new THREE.Mesh(new THREE.PlaneGeometry(wcx1 - wcx0, wcz1 - wcz0), floorMat);
+  wcFloor.rotation.x = -Math.PI / 2;
+  wcFloor.position.set((wcx0 + wcx1) / 2, 0, (wcz0 + wcz1) / 2);
+  group.add(wcFloor);
+  const wcCeil = new THREE.Mesh(new THREE.PlaneGeometry(wcx1 - wcx0, wcz1 - wcz0), wallMat);
+  wcCeil.rotation.x = Math.PI / 2;
+  wcCeil.position.set((wcx0 + wcx1) / 2, WALL_H, (wcz0 + wcz1) / 2);
+  group.add(wcCeil);
+
+  const wcBack = wallWithGap('z', wcz1 - wcz0, WALL_H, WALL_T, wallMat, 0, 0);
+  wcBack.position.set(wcx0, 0, (wcz0 + wcz1) / 2);
+  group.add(wcBack);
+  colliders.push({ minX: wcx0 - WALL_T / 2, maxX: wcx0 + WALL_T / 2, minZ: wcz0, maxZ: wcz1 });
+
+  const wcSideA = wallWithGap('x', wcx1 - wcx0, WALL_H, WALL_T, wallMat, 0, 0);
+  wcSideA.position.set((wcx0 + wcx1) / 2, 0, wcz0);
+  group.add(wcSideA);
+  colliders.push({ minX: wcx0, maxX: wcx1, minZ: wcz0 - WALL_T / 2, maxZ: wcz0 + WALL_T / 2 });
+
+  const wcSideB = wallWithGap('x', wcx1 - wcx0, WALL_H, WALL_T, wallMat, 0, 0);
+  wcSideB.position.set((wcx0 + wcx1) / 2, 0, wcz1);
+  group.add(wcSideB);
+  colliders.push({ minX: wcx0, maxX: wcx1, minZ: wcz1 - WALL_T / 2, maxZ: wcz1 + WALL_T / 2 });
+
+  const wcLight = new THREE.PointLight(0xdce8ee, 4, 5, 2);
+  wcLight.position.set((wcx0 + wcx1) / 2, WALL_H - 0.3, (wcz0 + wcz1) / 2);
+  group.add(wcLight);
+
+  const porcelainMat = new THREE.MeshStandardMaterial({ color: 0xeef0e8, roughness: 0.3 });
+  const toiletBase = limb(0.11, 0.14, 0.32, porcelainMat, 10);
+  toiletBase.position.set(wcx0 + 0.35, 0.16, wcz0 + 0.35);
+  group.add(toiletBase);
+  const toiletBowl = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), porcelainMat);
+  toiletBowl.position.set(wcx0 + 0.35, 0.34, wcz0 + 0.35);
+  group.add(toiletBowl);
+  const sink = box(0.36, 0.08, 0.28, porcelainMat);
+  sink.position.set(wcx0 + 0.3, 0.78, wcz1 - 0.3);
+  group.add(sink);
+  const sinkLeg = limb(0.04, 0.05, 0.78, porcelainMat, 8);
+  sinkLeg.position.set(wcx0 + 0.3, 0.39, wcz1 - 0.3);
+  group.add(sinkLeg);
+  // Miroir : PlaneGeometry par défaut regarde +Z, ici on l'approche par -Z
+  // depuis l'intérieur de la pièce (même piège que l'enseigne/tableau noir).
+  const mirror = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.4), glassMat);
+  mirror.position.set(wcx0 + 0.3, 1.35, wcz1 - WALL_T / 2 - 0.02);
+  mirror.rotation.y = Math.PI;
+  group.add(mirror);
 
   // ---------- Comptoir + caisse (côté mur droit) ----------
   const counter = box(1.1, 0.95, 2.4, counterMat);
@@ -317,7 +392,7 @@ export function buildShopWorld() {
   const register = box(0.35, 0.28, 0.3, metalMat);
   register.position.set(4.25, 0.95 + 0.14, -2.3);
   group.add(register);
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.16), new THREE.MeshBasicMaterial({ color: 0x2a4a6a, toneMapped: false }));
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.16), makeSignMaterial('CAISSE', { bg: '#12314a', fg: '#8fe0ff', fontSize: 46 }));
   screen.position.set(4.25, 1.13, -2.14);
   screen.rotation.y = Math.PI;
   group.add(screen);
@@ -374,10 +449,16 @@ export function buildShopWorld() {
   const shelf = box(0.28, 0.05, 2.6, woodMat);
   shelf.position.set(rx0 + 0.24, 1.0, 0.8);
   group.add(shelf);
+  // Position où un client vient se poster pour "choisir" son objet avant de
+  // rejoindre le comptoir (voir customerMovement.js) : un peu en retrait du
+  // rayon, face à l'étagère, même Z que l'objet demandé.
+  const shelfSlots = {};
   ['baguette', 'cartes', 'piece', 'chapeau'].forEach((id, i) => {
     const prop = buildMagicProp(id, 2.2);
-    prop.position.set(rx0 + 0.24, 1.025, -0.1 + i * 0.65);
+    const z = -0.1 + i * 0.65;
+    prop.position.set(rx0 + 0.24, 1.025, z);
     group.add(prop);
+    shelfSlots[id] = { x: rx0 + 0.9, z };
   });
   colliders.push({ minX: rx0 + 0.1, maxX: rx0 + 0.38, minZ: -0.55, maxZ: 2.15 });
 
@@ -389,9 +470,18 @@ export function buildShopWorld() {
   colliders.push({ minX: -3.65, maxX: -3.35, minZ: 0.85, maxZ: 1.15 });
   const trashPoint = { x: -3.5, z: 1.0, radius: 1.0 };
 
-  // Portes décoratives (arrière-boutique visible plus loin, ici juste WC).
-  const wcDoor = buildDoor(0.9, 2.0, bathDoorMat, rx0 + 0.03, -2.6, Math.PI / 2);
-  group.add(wcDoor);
+  // Porte des WC : coulisse à l'approche (voir doors.js) — plus une simple
+  // façade plaquée devant un mur plein, elle ferme/ouvre réellement la
+  // brèche découpée dans le mur gauche.
+  const wcDoorCtrl = createSlidingDoor({
+    material: bathDoorMat,
+    width: WC_DOOR_W,
+    height: WC_DOOR_H,
+    x: rx0,
+    gapCenterZ: wcDoorZ,
+    openTowardPositiveZ: true,
+  });
+  group.add(wcDoorCtrl.mesh);
 
   // ---------- Arrière-boutique (x 5..10, z -2..2) ----------
   const bx0 = rx1, bx1 = rx1 + 5, bz0 = -2, bz1 = 2;
@@ -448,11 +538,17 @@ export function buildShopWorld() {
     group.add(prop);
   });
 
-  // Porte STAFF ONLY entre les deux salles.
-  const staffDoorPanel = box(DOOR_W - 0.1, DOOR_H, 0.06, staffDoorMat);
-  staffDoorPanel.position.set(bx0, DOOR_H / 2, 0);
-  staffDoorPanel.rotation.y = Math.PI / 2;
-  group.add(staffDoorPanel);
+  // Porte STAFF ONLY entre les deux salles : coulisse à l'approche au lieu
+  // de rester un panneau statique qu'on traversait sans qu'il ne bouge.
+  const staffDoorCtrl = createSlidingDoor({
+    material: staffDoorMat,
+    width: DOOR_W - 0.1,
+    height: DOOR_H,
+    x: bx0,
+    gapCenterZ: 0,
+    openTowardPositiveZ: false,
+  });
+  group.add(staffDoorCtrl.mesh);
 
   // Placard de ménage (balai + débouche-chiotte), dans le fond de
   // l'arrière-boutique déjà réservée au personnel — assez loin du mur
@@ -478,6 +574,14 @@ export function buildShopWorld() {
   const startWorldPos = new THREE.Vector3(0, 0, -9);
   const startYaw = Math.PI;
 
+  // Où le joueur apparaît une fois l'enseigne retournée sur OUVERT (voir
+  // shiftStart.js) : côté comptoir, mais avec du recul et face à l'espace
+  // ouvert du magasin — pas collé contre le comptoir (sinon la lampe torse
+  // sature complètement l'écran à bout portant contre une surface aussi
+  // proche, même piège que la première fois qu'elle a été réglée).
+  const counterStandPos = new THREE.Vector3(3.0, 0, -1.3);
+  const counterStandYaw = 0;
+
   return {
     group,
     colliders,
@@ -485,10 +589,17 @@ export function buildShopWorld() {
     phonePoint,
     trashPoint,
     closetPoint,
+    signPoint,
     npc,
     frames,
+    shelfSlots,
     cleaningSpots,
     startWorldPos,
     startYaw,
+    counterStandPos,
+    counterStandYaw,
+    shopSign,
+    openSignMat,
+    doors: [staffDoorCtrl, wcDoorCtrl],
   };
 }
